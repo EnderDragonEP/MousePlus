@@ -29,7 +29,7 @@ IMAGE_VIEWERS = {
     "xnviewmp.exe": "XnView MP",
     "xnview.exe": "XnView Classic",
     "i_view64.exe": "IrfanView",
-    "i_view32.exe": "IrfanView (32-bit)",
+    "i_view32.exe": "IrfanView 32-bit",
     "fsviewer.exe": "FastStone Image Viewer",
     "imageglass.exe": "ImageGlass",
     "honeyview.exe": "Honeyview",
@@ -38,6 +38,12 @@ IMAGE_VIEWERS = {
     "jpegview.exe": "JPEGView",
     "qimgv.exe": "qimgv",
 }
+
+
+def program_label(program: str) -> str:
+    """How the app list shows a program: "XnView MP (xnviewmp.exe)", or just the file for unknown ones."""
+    name = IMAGE_VIEWERS.get(program)
+    return f"{name} ({program})" if name else program
 
 
 def program_names(values) -> list:

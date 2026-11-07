@@ -1,6 +1,6 @@
 import unittest
 
-from mouseplus.config import IMAGE_VIEWERS, ProgramListValidator, cfg, program_names
+from mouseplus.config import IMAGE_VIEWERS, ProgramListValidator, cfg, program_label, program_names
 
 
 class ProgramListTest(unittest.TestCase):
@@ -17,6 +17,10 @@ class ProgramListTest(unittest.TestCase):
         self.assertTrue(validator.validate(["xnviewmp.exe"]))
         self.assertFalse(validator.validate(["XnViewMP.exe"]))
         self.assertEqual(validator.correct(["XnViewMP.exe"]), ["xnviewmp.exe"])
+
+    def test_label_shows_the_name_and_the_program_file(self):
+        self.assertEqual(program_label("xnviewmp.exe"), "XnView MP (xnviewmp.exe)")
+        self.assertEqual(program_label("notepad.exe"), "notepad.exe")  # added by hand: no name to show
 
     def test_image_viewers_are_on_the_list_by_default(self):
         self.assertEqual(cfg.smoothExcluded.defaultValue, list(IMAGE_VIEWERS))

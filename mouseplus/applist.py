@@ -2,46 +2,33 @@
 import os
 
 from PyQt6.QtCore import QFileInfo, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import (QFileDialog, QFileIconProvider, QHBoxLayout, QListWidgetItem, QSizePolicy, QVBoxLayout,
-                             QWidget)
-from qfluentwidgets import (BodyLabel, CaptionLabel, ExpandSettingCard, FluentIcon as FIF, ListWidget, MessageBoxBase,
-                            PushButton, SubtitleLabel, ToolButton, TransparentPushButton, qconfig)
+from PyQt6.QtWidgets import QFileDialog, QFileIconProvider, QHBoxLayout, QListWidgetItem, QSizePolicy, QWidget
+from qfluentwidgets import (BodyLabel, ExpandSettingCard, FluentIcon as FIF, ListWidget, MessageBoxBase, PushButton,
+                            SubtitleLabel, ToolButton, TransparentPushButton, qconfig)
 
 from . import winapi
-from .config import IMAGE_VIEWERS
+from .config import program_label
 
-_SECONDARY = (QColor(96, 96, 96), QColor(206, 206, 206))  # light, dark
 _TITLE_CHARS = 48  # longer window titles are shortened so the program name stays visible
 
 
 class AppItem(QWidget):
-    """One app in the list: its name and program file, with a remove button."""
+    """One app in the list, "XnView MP (xnviewmp.exe)", with a remove button."""
 
     removed = pyqtSignal(str)
 
     def __init__(self, program: str, parent=None):
         super().__init__(parent)
         self.program = program
-        name = IMAGE_VIEWERS.get(program)
-        self.nameLabel = BodyLabel(name or program, self)
-        self.programLabel = CaptionLabel(program, self)
-        self.programLabel.setTextColor(*_SECONDARY)
-        self.programLabel.setVisible(bool(name))  # unknown apps already show the program file
+        self.label = BodyLabel(program_label(program), self)
         self.removeButton = ToolButton(FIF.CLOSE, self)
         self.removeButton.setFixedSize(39, 29)
         self.removeButton.setIconSize(QSize(12, 12))
         self.removeButton.clicked.connect(lambda: self.removed.emit(self.program))
 
-        text = QVBoxLayout()
-        text.setSpacing(0)
-        text.addStretch(1)  # keep the two lines together, centred in the row
-        text.addWidget(self.nameLabel)
-        text.addWidget(self.programLabel)
-        text.addStretch(1)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(48, 0, 60, 0)  # lined up with the card's title, like a folder list
-        layout.addLayout(text)
+        layout.addWidget(self.label)
         layout.addStretch(1)
         layout.addWidget(self.removeButton, 0, Qt.AlignmentFlag.AlignRight)
         self.setFixedHeight(53)
