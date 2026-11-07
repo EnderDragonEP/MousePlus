@@ -1,4 +1,4 @@
-# Builds dist\HorizontalScroll.exe inside a project-local virtual environment,
+# Builds dist\MousePlus.exe inside a project-local virtual environment,
 # so unrelated packages from the global Python never end up in the exe.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -12,11 +12,11 @@ $py = ".\.venv\Scripts\python.exe"
 & $py -m pip install --disable-pip-version-check -q -r requirements.txt pyinstaller
 if ($LASTEXITCODE) { throw "pip install failed" }
 
-& $py -m hscroll.icons build\app.ico
+& $py -m mouseplus.icons build\app.ico
 if ($LASTEXITCODE) { throw "Icon generation failed" }
 
-& $py -m PyInstaller --noconfirm --clean HorizontalScroll.spec
+& $py -m PyInstaller --noconfirm --clean MousePlus.spec
 if ($LASTEXITCODE) { throw "PyInstaller failed" }
 
-$exe = Get-Item dist\HorizontalScroll.exe
+$exe = Get-Item dist\MousePlus.exe
 "Built {0} ({1:N1} MB)" -f $exe.FullName, ($exe.Length / 1MB)

@@ -1,8 +1,9 @@
-# Horizontal Scroll
+# Mouse Plus
 
 ![Banner](.asset/banner.png)
 
-A small Windows tray app: hold **Mouse Back** or **Mouse Forward** and roll the wheel to scroll sideways.
+A small Windows tray app that adds to your mouse: hold **Mouse Back** or **Mouse Forward** and roll the wheel to scroll sideways.
+Formerly called Horizontal Scroll; settings and autostart move over automatically.
 The settings window follows the Fluent Design System: Mica background, light/dark mode and your accent color.
 
 ## Features
@@ -19,7 +20,7 @@ The settings window follows the Fluent Design System: Mica background, light/dar
 
 ## Limitations
 
-- It doesn't work over windows of apps running as administrator unless Horizontal Scroll also runs as administrator. Windows blocks this.
+- It doesn't work over windows of apps running as administrator unless Mouse Plus also runs as administrator. Windows blocks this.
 - Apps without horizontal-scroll support won't scroll sideways.
 - If mouse software (for example Logitech Options+) remaps Back/Forward to keystrokes, the app never sees the buttons.
 - In hold mode, Back/Forward fires on button release, a moment later than usual.
@@ -27,7 +28,7 @@ The settings window follows the Fluent Design System: Mica background, light/dar
 
 ## Run
 
-- **Exe:** download `HorizontalScroll.exe` from the [Releases](../../releases) page, or build it yourself (see below). It's a single file, and Python isn't needed. Start it with `--tray` to start hidden.
+- **Exe:** download `MousePlus.exe` from the [Releases](../../releases) page, or build it yourself (see below). It's a single file, and Python isn't needed. Start it with `--tray` to start hidden.
 - **From source:**
 
   ```powershell
@@ -38,7 +39,7 @@ The settings window follows the Fluent Design System: Mica background, light/dar
 
   After that, you can also just double-click `run.pyw` to test your changes without building the exe.
 
-Settings are saved to `%APPDATA%\HorizontalScroll\config.json`, and errors are logged to `error.log` in the same folder.
+Settings are saved to `%APPDATA%\MousePlus\config.json`, and errors are logged to `error.log` in the same folder.
 
 ## Build the exe
 
@@ -46,7 +47,7 @@ Settings are saved to `%APPDATA%\HorizontalScroll\config.json`, and errors are l
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-The script creates `.venv`, installs the requirements plus PyInstaller, and writes `dist\HorizontalScroll.exe` (about 24 MB).
+The script creates `.venv`, installs the requirements plus PyInstaller, and writes `dist\MousePlus.exe` (about 24 MB).
 
 ## Tests
 
@@ -57,23 +58,24 @@ The script creates `.venv`, installs the requirements plus PyInstaller, and writ
 ## Layout
 
 ```text
-main.py              entry point: single instance, wires config, hook and UI
-hscroll/engine.py    scroll/toggle/full-screen decisions (pure, unit-tested)
-hscroll/hook.py      low-level mouse hook thread + SendInput injector thread
-hscroll/winapi.py    ctypes bindings, input injection, full-screen detection
-hscroll/config.py    settings (qfluentwidgets QConfig) and the Run-key autostart
-hscroll/accent.py    Windows accent shades + watcher for accent changes
-hscroll/window.py    Fluent settings window
-hscroll/tray.py      tray icon and menu
-hscroll/osd.py       toggle-mode on/off pill
-hscroll/icons.py     icons drawn in code + .ico writer for the build
+main.py                entry point: single instance, wires config, hook and UI
+mouseplus/horizontal.py  horizontal scroll and toggle decisions (pure, unit-tested)
+mouseplus/hook.py      low-level mouse hook thread + SendInput injector thread
+mouseplus/winapi.py    ctypes bindings, input injection, full-screen detection
+mouseplus/config.py    settings (qfluentwidgets QConfig) and the Run-key autostart
+mouseplus/migrate.py   one-time move of settings and autostart from Horizontal Scroll
+mouseplus/accent.py    Windows accent shades + watcher for accent changes
+mouseplus/window.py    Fluent settings window, one tab per feature
+mouseplus/tray.py      tray icon and menu
+mouseplus/osd.py       toggle-mode on/off pill
+mouseplus/icons.py     icons drawn in code + .ico writer for the build
 ```
 
 ## Disclaimer
 
 This software is provided "as is", without warranty of any kind. Use it at your own risk; the author is not responsible for any damage or data loss resulting from its use.
 
-Horizontal Scroll started as a personal project. It is not affiliated with or endorsed by Microsoft.
+Mouse Plus (formerly Horizontal Scroll) started as a personal project. It is not affiliated with or endorsed by Microsoft.
 
 Claude Code was used in the development of this software.
 

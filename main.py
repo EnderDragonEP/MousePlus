@@ -1,4 +1,4 @@
-"""Horizontal Scroll - hold Mouse Back/Forward and roll the wheel to scroll sideways.
+"""Mouse Plus - horizontal scrolling, proportional cursor movement between monitors and smooth scrolling.
 
 Usage: main.py [--tray]   (--tray starts hidden in the notification area)
 """
@@ -13,16 +13,17 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 from qfluentwidgets import SystemThemeListener, Theme, ThemeColor, isDarkTheme, qconfig, setTheme, setThemeColor
 
-from hscroll import APP_ID, APP_NAME, DATA_DIR, LOG_FILE, config, winapi
-from hscroll.accent import AccentWatcher, windows_accent
-from hscroll.config import cfg
-from hscroll.hook import MouseHook
-from hscroll.osd import Osd
-from hscroll.tray import Tray
-from hscroll.window import SettingsWindow
+from mouseplus import APP_ID, APP_NAME, DATA_DIR, LOG_FILE, OLD_APP_ID, config, migrate, winapi
+from mouseplus.accent import AccentWatcher, windows_accent
+from mouseplus.config import cfg
+from mouseplus.hook import MouseHook
+from mouseplus.osd import Osd
+from mouseplus.tray import Tray
+from mouseplus.window import SettingsWindow
 
-log = logging.getLogger("hscroll")
+log = logging.getLogger("mouseplus")
 SERVER_NAME = f"{APP_ID}-{getpass.getuser()}"
+OLD_SERVER_NAME = f"{OLD_APP_ID}-{getpass.getuser()}"
 
 
 def setup_logging():
@@ -38,10 +39,10 @@ def setup_logging():
     sys.excepthook = lambda *exc_info: log.error("Unhandled exception", exc_info=exc_info)
 
 
-def signal_running_instance(show: bool) -> bool:
-    """If another instance is running, ask it to show its window and return True."""
+def signal_running_instance(server: str, show: bool) -> bool:
+    """If an instance listens on `server`, optionally ask it to show its window, and return True."""
     sock = QLocalSocket()
-    sock.connectToServer(SERVER_NAME)
+    sock.connectToServer(server)
     if not sock.waitForConnected(500):
         return False
     if show:
@@ -85,10 +86,12 @@ def sync_accent():
 class App(QObject):
     def __init__(self, qapp: QApplication, show_window: bool):
         super().__init__()
+        migrate.migrate()  # settings and autostart from Horizontal Scroll, once
         config.load()
         setTheme(Theme.AUTO)
         sync_accent()
         config.refresh_autostart()
+        self.paused = False  # tray "Pause": every feature, until resumed or restarted
 
         # Build all UI before the hook starts so heavy GUI work never stalls mouse input.
         self.window = SettingsWindow()
@@ -106,12 +109,14 @@ class App(QObject):
         self.window.hiddenToTray.connect(self._onHiddenToTray)
         self.tray.settingsRequested.connect(self.window.present)
         self.tray.updateCheckRequested.connect(self._checkForUpdates)
+        self.tray.pauseRequested.connect(self._togglePause)
         self.tray.exitRequested.connect(qapp.quit)
         self.hook.latchedChanged.connect(self._onLatched)
         self.hook.failed.connect(self._onHookFailed)
         self.themeListener.systemThemeChanged.connect(self._onAccentChanged)  # dark/light use different shades
         self.accentWatcher.changed.connect(self.accentTimer.start)
-        for item in (cfg.enabled, cfg.trigger, cfg.toggleMode, cfg.disableInFullscreen, cfg.reverse, cfg.speed):
+        for item in (cfg.horizontalEnabled, cfg.trigger, cfg.toggleMode, cfg.disableInFullscreen,
+                     cfg.horizontalReverse, cfg.horizontalSpeed):
             item.valueChanged.connect(self._apply)
         qapp.aboutToQuit.connect(self._shutdown)
 
@@ -121,12 +126,21 @@ class App(QObject):
         self._apply()
         if show_window:
             self.window.present()
+        if signal_running_instance(OLD_SERVER_NAME, show=False):
+            self.tray.showMessage(APP_NAME, "Horizontal Scroll is still running. Quit it from its tray icon, "
+                                            "so the two apps don't both react to the mouse.",
+                                  self.window.windowIcon(), 8000)
 
     def _apply(self, *_):
-        if cfg.enabled.value:
-            self.hook.start(config.to_settings())  # updates the settings if already running
+        if not self.paused and cfg.horizontalEnabled.value:
+            self.hook.start(config.horizontal_settings())  # updates the settings if already running
         else:
             self.hook.stop()
+
+    def _togglePause(self):
+        self.paused = not self.paused
+        self.tray.setPaused(self.paused)
+        self._apply()
 
     def _checkForUpdates(self):
         self.window.present()  # the result is shown in the window
@@ -169,7 +183,7 @@ def main() -> int:
     qapp = QApplication(sys.argv)
     qapp.setApplicationName(APP_NAME)
     qapp.setQuitOnLastWindowClosed(False)
-    if signal_running_instance(show_window):
+    if signal_running_instance(SERVER_NAME, show_window):
         return 0
     setup_logging()
     qapp.controller = App(qapp, show_window)  # keep a reference for the app's lifetime

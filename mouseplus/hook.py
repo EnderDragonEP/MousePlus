@@ -9,9 +9,9 @@ from ctypes import wintypes
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from . import winapi as w
-from .engine import Engine, Settings
+from .horizontal import Engine, Settings
 
-log = logging.getLogger("hscroll")
+log = logging.getLogger("mouseplus")
 
 _WM_APPLY = w.WM_APP + 1   # thread message: pick up new settings
 _WATCHDOG_MS = 30_000      # periodic hook re-install

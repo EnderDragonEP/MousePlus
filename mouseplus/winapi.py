@@ -35,7 +35,8 @@ MONITOR_DEFAULTTONEAREST = 2
 GWL_STYLE = -16
 WS_CAPTION = 0x00C00000
 
-# Tags every event we inject (dwExtraInfo) so our own hook lets it through.
+# Tags every event we inject (dwExtraInfo) so our own hook lets it through. Keep the value:
+# Horizontal Scroll used the same tag, so an old copy and Mouse Plus ignore each other's events.
 MAGIC = 0x48534352
 
 

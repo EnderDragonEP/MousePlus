@@ -1,4 +1,4 @@
-"""Double-click to run Horizontal Scroll from source, without building the exe.
+"""Double-click to run Mouse Plus from source, without building the exe.
 
 Uses the project's .venv (create it once with the commands in README.md).
 """
@@ -14,7 +14,7 @@ VENV = ROOT / ".venv"
 def fail(text: str):
     import ctypes
 
-    ctypes.windll.user32.MessageBoxW(None, text, "Horizontal Scroll", 0x10)  # MB_ICONERROR
+    ctypes.windll.user32.MessageBoxW(None, text, "Mouse Plus", 0x10)  # MB_ICONERROR
     sys.exit(1)
 
 
@@ -32,5 +32,5 @@ sys.path.insert(0, str(ROOT))
 try:
     import main
 except Exception:
-    fail("Horizontal Scroll couldn't start:\n\n" + traceback.format_exc())
+    fail("Mouse Plus couldn't start:\n\n" + traceback.format_exc())
 sys.exit(main.main())

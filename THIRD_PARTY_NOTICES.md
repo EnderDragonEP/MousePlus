@@ -1,7 +1,7 @@
 # Third-party notices
 
-Horizontal Scroll is licensed under the [GNU General Public License v3.0](LICENSE).
-It is built on the open-source components below. The released `HorizontalScroll.exe` contains all of them; running from source only needs them installed (see `requirements.txt`).
+Mouse Plus is licensed under the [GNU General Public License v3.0](LICENSE).
+It is built on the open-source components below. The released `MousePlus.exe` contains all of them; running from source only needs them installed (see `requirements.txt`).
 
 | Component | Version | License | Source |
 | --- | --- | --- | --- |
@@ -20,14 +20,14 @@ The versions are the ones used to build the exe.
 ## GPL-3.0 components
 
 PyQt6 is Copyright (c) Riverbank Computing Limited. PyQt6-Fluent-Widgets and PyQt6-Frameless-Window are Copyright (c) zhiyiYo.
-They are used under the GNU General Public License v3.0, the same license as Horizontal Scroll; its full text is in [LICENSE](LICENSE).
+They are used under the GNU General Public License v3.0, the same license as Mouse Plus; its full text is in [LICENSE](LICENSE).
 
 ## Qt (LGPL-3.0)
 
 The exe contains the Qt 6 libraries, Copyright (c) The Qt Company Ltd. and other contributors, used under the
 [GNU Lesser General Public License v3.0](https://www.gnu.org/licenses/lgpl-3.0.html).
 Qt's source code is available from <https://download.qt.io/official_releases/qt/>.
-Because Horizontal Scroll's complete source code and build script are public, you can rebuild the exe with a modified version of Qt.
+Because Mouse Plus's complete source code and build script are public, you can rebuild the exe with a modified version of Qt.
 
 ## Python (PSF License Agreement)
 

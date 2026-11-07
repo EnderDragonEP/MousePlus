@@ -1,6 +1,6 @@
 import unittest
 
-from hscroll.engine import BACK, FORWARD, PASS, SWALLOW, Engine, Settings
+from mouseplus.horizontal import BACK, FORWARD, PASS, SWALLOW, Engine, Settings
 
 
 class EngineTest(unittest.TestCase):

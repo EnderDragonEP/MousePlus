@@ -11,8 +11,14 @@ from .config import TRIGGER_TEXTS, cfg
 _SECONDARY = (QColor(96, 96, 96), QColor(206, 206, 206))  # light, dark
 
 
+def active_features() -> list:
+    """Names of the features that are switched on."""
+    features = [("Horizontal Scroll", cfg.horizontalEnabled.value)]
+    return [name for name, on in features if on]
+
+
 class StatusHeader(QWidget):
-    """Three lines at the top of the menu: state, how to use it right now, and the main settings."""
+    """Three lines at the top of the menu: state, how to use it right now, and the features that are on."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -40,15 +46,16 @@ class StatusHeader(QWidget):
 class Tray(QSystemTrayIcon):
     settingsRequested = pyqtSignal()
     updateCheckRequested = pyqtSignal()
+    pauseRequested = pyqtSignal()  # toggles pause for every feature; the app owns the state
     exitRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._latched = False
+        self._paused = False
 
         self.header = StatusHeader()
-        self.pauseAction = Action(FIF.PAUSE, "Pause horizontal scrolling",
-                                  triggered=lambda: qconfig.set(cfg.enabled, not cfg.enabled.value))
+        self.pauseAction = Action(FIF.PAUSE, "Pause Mouse Plus", triggered=lambda: self.pauseRequested.emit())
         self.modeAction = Action(FIF.PIN, "Switch to toggle mode",
                                  triggered=lambda: qconfig.set(cfg.toggleMode, not cfg.toggleMode.value))
         self.settingsAction = Action(FIF.SETTING, "Settings", triggered=lambda: self.settingsRequested.emit())
@@ -67,7 +74,7 @@ class Tray(QSystemTrayIcon):
         self.setContextMenu(self.menu)
 
         self.activated.connect(self._onActivated)
-        for item in (cfg.enabled, cfg.toggleMode, cfg.trigger, cfg.speed, cfg.reverse):
+        for item in (cfg.horizontalEnabled, cfg.toggleMode, cfg.trigger):
             item.valueChanged.connect(self.refresh)
         self.refresh()
 
@@ -75,31 +82,38 @@ class Tray(QSystemTrayIcon):
         self._latched = on
         self.refresh()
 
+    def setPaused(self, on: bool):
+        self._paused = on
+        self.refresh()
+
     def refresh(self, *_):
-        enabled, toggle = cfg.enabled.value, cfg.toggleMode.value
+        features = active_features()
+        horizontal, toggle = cfg.horizontalEnabled.value, cfg.toggleMode.value
         trigger = TRIGGER_TEXTS[cfg.trigger.value]
-        if not enabled:
-            state, tip, title, detail = "off", "Off", "Horizontal scrolling off", "Paused"
+        if self._paused:
+            state, tip, title, detail = "off", "Paused", "Mouse Plus is paused", "Resume to turn features back on"
+        elif not features:
+            state, tip, title, detail = "off", "No features on", "No features are on", "Turn one on in Settings"
         elif self._latched:
-            state, tip = "latched", "Locked on"
+            state, tip = "latched", "Horizontal scrolling locked on"
             title, detail = "Horizontal scrolling locked on", f"Click {trigger} to release"
-        elif toggle:
-            state, tip, title, detail = "on", "On", "Horizontal scrolling on", f"Click {trigger} to lock"
+        elif horizontal and toggle:
+            state, tip, title, detail = "on", "On", "Mouse Plus is on", f"Click {trigger} to lock"
+        elif horizontal:
+            state, tip, title, detail = "on", "On", "Mouse Plus is on", f"Hold {trigger} + wheel"
         else:
-            state, tip, title, detail = "on", "On", "Horizontal scrolling on", f"Hold {trigger} + wheel"
-        caption = [
-            "Toggle mode" if toggle else "Hold mode",
-            f"{cfg.speed.value / 10:.1f}× speed",
-        ] + (["reversed"] if cfg.reverse.value else [])
+            state, tip, title, detail = "on", "On", "Mouse Plus is on", features[0]
+        active = state != "off"
 
         self.setIcon(icons.tray_icon(state))
         self.setToolTip(f"{APP_NAME} – {tip}")
-        self.header.setStatus(title, detail, " · ".join(caption), active=enabled)
+        self.header.setStatus(title, detail, " · ".join(features) or "Every feature is off", active)
         self._fitHeader()
-        self.pauseAction.setText("Pause horizontal scrolling" if enabled else "Resume horizontal scrolling")
-        self.pauseAction.setIcon(FIF.PAUSE if enabled else FIF.PLAY)
+        self.pauseAction.setText("Resume Mouse Plus" if self._paused else "Pause Mouse Plus")
+        self.pauseAction.setIcon(FIF.PLAY if self._paused else FIF.PAUSE)
         self.modeAction.setText("Switch to hold mode" if toggle else "Switch to toggle mode")
         self.modeAction.setIcon(FIF.UNPIN if toggle else FIF.PIN)
+        self.modeAction.setEnabled(horizontal and not self._paused)  # the menu can't hide items
 
     def _fitHeader(self):
         """The header is the menu's first item; resize that item when the text changes."""

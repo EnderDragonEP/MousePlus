@@ -1,6 +1,6 @@
 import unittest
 
-from hscroll.updates import is_newer, parse_version, version_from_tag
+from mouseplus.updates import is_newer, parse_version, version_from_tag
 
 
 class UpdateVersionTest(unittest.TestCase):

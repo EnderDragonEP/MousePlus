@@ -1,11 +1,11 @@
-"""Settings window, built with PyQt6-Fluent-Widgets (Fluent Design, Mica on Windows 11)."""
+"""Settings window: one tab per feature in a left rail (PyQt6-Fluent-Widgets MSFluentWindow, Mica on Windows 11)."""
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
-from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, FluentIcon as FIF, FluentWidget,
-                            HyperlinkLabel, InfoBar, InfoBarPosition, MessageBox, PrimaryPushSettingCard,
-                            RangeSettingCard, ScrollArea, SettingCardGroup, SwitchSettingCard, TitleLabel,
-                            setCustomStyleSheet, setFont)
+from PyQt6.QtWidgets import QHBoxLayout, QWidget
+from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, FluentIcon as FIF, HyperlinkLabel, InfoBar,
+                            InfoBarPosition, MessageBox, MSFluentWindow, NavigationItemPosition,
+                            PrimaryPushSettingCard, RangeSettingCard, ScrollArea, SettingCardGroup, SwitchSettingCard,
+                            TitleLabel, setCustomStyleSheet, setFont)
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
 from .config import TRIGGER_TEXTS, cfg
@@ -25,13 +25,13 @@ class Group(SettingCardGroup):
         return self.resize(self.width(), h)
 
 
-class SpeedCard(RangeSettingCard):
-    """Slider card that shows the speed as a multiplier (stored in tenths)."""
+class MultiplierCard(RangeSettingCard):
+    """Slider card that shows a value stored in tenths as a multiplier ("1.0×")."""
 
-    def __init__(self, parent=None):
-        super().__init__(cfg.speed, FIF.SPEED_HIGH, "Scroll speed", "Distance per wheel step", parent)
+    def __init__(self, configItem, icon, title, content, parent=None):
+        super().__init__(configItem, icon, title, content, parent)
         self.slider.setMinimumWidth(180)
-        self._show(cfg.speed.value)
+        self._show(configItem.value)
 
     def setValue(self, value):
         super().setValue(value)
@@ -61,59 +61,27 @@ class AboutCard(PrimaryPushSettingCard):
         self.vBoxLayout.addLayout(row)
 
 
-class SettingsPage(ScrollArea):
-    """Fixed page header (title + hint) above scrolling setting cards."""
+class Page(ScrollArea):
+    """One tab: a fixed title and hint above scrolling setting cards."""
 
-    def __init__(self, parent=None):
+    def __init__(self, objectName: str, title: str, parent=None):
         super().__init__(parent)
+        self.setObjectName(objectName)  # the navigation rail routes by object name
         self.view = QWidget()
         self.expand = ExpandLayout(self.view)
-        self.title = TitleLabel(APP_NAME, self)
+        self.title = TitleLabel(title, self)
         self.hint = BodyLabel(self)
         self.hint.setWordWrap(True)
         self.hint.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
-
-        self.enableCard = SwitchSettingCard(
-            icons.glyph_icon(), "Horizontal scrolling", "Turn the whole feature on or off", cfg.enabled, self.view)
-
-        self.activation = Group("Activation", self.view)
-        self.triggerCard = ComboBoxSettingCard(
-            cfg.trigger, FIF.RETURN, "Trigger button", "The mouse button that turns the wheel sideways",
-            texts=list(TRIGGER_TEXTS.values()), parent=self.activation)
-        self.toggleCard = SwitchSettingCard(
-            FIF.PIN, "Toggle mode", "Click the trigger to turn horizontal scrolling on, click again to turn it off",
-            cfg.toggleMode, self.activation)
-        self.activation.addSettingCards([self.triggerCard, self.toggleCard])
-
-        self.scrolling = Group("Scrolling", self.view)
-        self.speedCard = SpeedCard(self.scrolling)
-        self.reverseCard = SwitchSettingCard(
-            FIF.SYNC, "Reverse direction", "Wheel down scrolls left instead of right", cfg.reverse, self.scrolling)
-        self.scrolling.addSettingCards([self.speedCard, self.reverseCard])
-
-        self.general = Group("General", self.view)
-        self.fullscreenCard = SwitchSettingCard(
-            FIF.FULL_SCREEN, "Disable in full-screen apps",
-            "Games and full-screen videos keep the normal Back and Forward buttons",
-            cfg.disableInFullscreen, self.general)
-        self.startupCard = SwitchSettingCard(
-            FIF.POWER_BUTTON, "Start with Windows", "Start in the notification area when you sign in",
-            parent=self.general)
-        self.general.addSettingCards([self.fullscreenCard, self.startupCard])
-
-        self.about = Group("About", self.view)
-        self.aboutCard = AboutCard(self.about)
-        self.about.addSettingCard(self.aboutCard)
-
-        bottomPadding = QWidget(self.view)  # ExpandLayout ignores the bottom margin
-        bottomPadding.setFixedHeight(8)
-
         self.expand.setSpacing(28)
         self.expand.setContentsMargins(36, 0, 36, 0)
-        for widget in (self.enableCard, self.activation, self.scrolling, self.general, self.about, bottomPadding):
-            self.expand.addWidget(widget)
-
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+    def addWidgets(self, *widgets):
+        bottomPadding = QWidget(self.view)  # ExpandLayout ignores the bottom margin
+        bottomPadding.setFixedHeight(8)
+        for widget in (*widgets, bottomPadding):
+            self.expand.addWidget(widget)
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.enableTransparentBackground()
@@ -134,31 +102,88 @@ class SettingsPage(ScrollArea):
         self.setViewportMargins(0, self.hint.geometry().bottom() + 24, 0, 0)
 
 
-class SettingsWindow(FluentWidget):
+class HorizontalPage(Page):
+    def __init__(self, parent=None):
+        super().__init__("horizontalPage", "Horizontal Scroll", parent)
+        self.enableCard = SwitchSettingCard(
+            icons.glyph_icon(), "Horizontal scrolling", "Turn this feature on or off",
+            cfg.horizontalEnabled, self.view)
+
+        self.activation = Group("Activation", self.view)
+        self.triggerCard = ComboBoxSettingCard(
+            cfg.trigger, FIF.RETURN, "Trigger button", "The mouse button that turns the wheel sideways",
+            texts=list(TRIGGER_TEXTS.values()), parent=self.activation)
+        self.toggleCard = SwitchSettingCard(
+            FIF.PIN, "Toggle mode", "Click the trigger to turn horizontal scrolling on, click again to turn it off",
+            cfg.toggleMode, self.activation)
+        self.activation.addSettingCards([self.triggerCard, self.toggleCard])
+
+        self.scrolling = Group("Scrolling", self.view)
+        self.speedCard = MultiplierCard(cfg.horizontalSpeed, FIF.SPEED_HIGH, "Scroll speed",
+                                        "Distance per wheel step", self.scrolling)
+        self.reverseCard = SwitchSettingCard(
+            FIF.SYNC, "Reverse direction", "Wheel down scrolls left instead of right",
+            cfg.horizontalReverse, self.scrolling)
+        self.scrolling.addSettingCards([self.speedCard, self.reverseCard])
+
+        self.addWidgets(self.enableCard, self.activation, self.scrolling)
+        cfg.trigger.valueChanged.connect(self._updateHint)
+        cfg.toggleMode.valueChanged.connect(self._updateHint)
+        self._updateHint()
+
+    def _updateHint(self, *_):
+        trigger = TRIGGER_TEXTS[cfg.trigger.value]
+        if cfg.toggleMode.value:
+            text = f"Click {trigger} to turn horizontal scrolling on or off. You can also hold it while rolling the wheel."
+        else:
+            text = f"Hold {trigger} and roll the wheel to scroll sideways. A quick click still works as usual."
+        self.setHint(text)
+
+
+class GeneralPage(Page):
+    def __init__(self, parent=None):
+        super().__init__("generalPage", "General", parent)
+        self.general = Group("Behavior", self.view)
+        self.fullscreenCard = SwitchSettingCard(
+            FIF.FULL_SCREEN, "Disable in full-screen apps",
+            "Games and full-screen videos get the normal mouse behavior", cfg.disableInFullscreen, self.general)
+        self.startupCard = SwitchSettingCard(
+            FIF.POWER_BUTTON, "Start with Windows", "Start in the notification area when you sign in",
+            parent=self.general)
+        self.general.addSettingCards([self.fullscreenCard, self.startupCard])
+
+        self.about = Group("About", self.view)
+        self.aboutCard = AboutCard(self.about)
+        self.about.addSettingCard(self.aboutCard)
+
+        self.addWidgets(self.general, self.about)
+        self.setHint("Settings for the whole app. Right-click the tray icon to pause every feature at once.")
+
+
+class SettingsWindow(MSFluentWindow):
     hiddenToTray = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(icons.app_icon())
-        self.page = SettingsPage(self)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, self.titleBar.height(), 0, 0)
-        layout.addWidget(self.page)
-        self.titleBar.raise_()
 
-        self.setMinimumWidth(520)
+        self.horizontalPage = HorizontalPage(self)
+        self.generalPage = GeneralPage(self)
+        self.addSubInterface(self.horizontalPage, icons.glyph_icon(), "Horizontal",
+                             selectedIcon=icons.glyph_icon(accent=True))
+        self.addSubInterface(self.generalPage, FIF.SETTING, "General", position=NavigationItemPosition.BOTTOM)
+
+        self.setMinimumWidth(600)
         self._placed = False
 
-        self.page.startupCard.setChecked(config.is_autostart())
-        self.page.startupCard.checkedChanged.connect(self._setAutostart)
+        about = self.generalPage.aboutCard
+        self.generalPage.startupCard.setChecked(config.is_autostart())
+        self.generalPage.startupCard.checkedChanged.connect(self._setAutostart)
         self.updates = UpdateChecker(self)
         self.updates.finished.connect(self._onUpdateChecked)
         self.updates.failed.connect(self._onUpdateFailed)
-        self.page.aboutCard.clicked.connect(self.checkForUpdates)
-        cfg.trigger.valueChanged.connect(self._updateHint)
-        cfg.toggleMode.valueChanged.connect(self._updateHint)
-        self._updateHint()
+        about.clicked.connect(self.checkForUpdates)
 
     def present(self):
         if not self._placed:
@@ -166,7 +191,7 @@ class SettingsWindow(FluentWidget):
             # can arrive late and override a size set while the window is hidden.
             self._placed = True
             area = QGuiApplication.primaryScreen().availableGeometry()
-            self.resize(640, min(962, area.height() - 48))
+            self.resize(720, min(760, area.height() - 48))
             self.move(area.center() - self.rect().center())
         if self.isMinimized():
             self.showNormal()
@@ -180,22 +205,15 @@ class SettingsWindow(FluentWidget):
         self.hide()
         self.hiddenToTray.emit()
 
-    def _updateHint(self, *_):
-        trigger = TRIGGER_TEXTS[cfg.trigger.value]
-        if cfg.toggleMode.value:
-            text = f"Click {trigger} to turn horizontal scrolling on or off. You can also hold it while rolling the wheel."
-        else:
-            text = f"Hold {trigger} and roll the wheel to scroll sideways. A quick click still works as usual."
-        self.page.setHint(text)
-
     def checkForUpdates(self):
-        if not self.page.aboutCard.button.isEnabled():
+        self.switchTo(self.generalPage)
+        if not self.generalPage.aboutCard.button.isEnabled():
             return  # a check is already running
         self._setChecking(True)
         self.updates.check()
 
     def _setChecking(self, checking: bool):
-        button = self.page.aboutCard.button
+        button = self.generalPage.aboutCard.button
         button.setEnabled(not checking)
         button.setText("Checking…" if checking else "Check for updates")
 
@@ -222,7 +240,7 @@ class SettingsWindow(FluentWidget):
         try:
             config.set_autostart(on)
         except OSError as e:
-            card = self.page.startupCard
+            card = self.generalPage.startupCard
             card.switchButton.blockSignals(True)
             card.setChecked(not on)
             card.switchButton.blockSignals(False)

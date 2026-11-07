@@ -45,7 +45,7 @@ class UpdateChecker(QObject):
     def check(self):
         request = QNetworkRequest(QUrl(LATEST_RELEASE_API))
         request.setRawHeader(b"Accept", b"application/vnd.github+json")
-        request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f"HorizontalScroll/{__version__}")
+        request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f"MousePlus/{__version__}")
         request.setTransferTimeout(10_000)
         reply = self._network.get(request)
         reply.finished.connect(lambda: self._onFinished(reply))

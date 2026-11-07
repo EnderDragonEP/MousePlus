@@ -1,6 +1,6 @@
-"""Icons drawn in code (a mouse between two chevrons), so they stay crisp at any DPI.
+"""Icons drawn in code (a mouse between two chevrons, plus a "+" badge for the app), so they stay crisp at any DPI.
 
-Run `python -m hscroll.icons out.ico` to write the multi-size .ico used for the exe.
+Run `python -m mouseplus.icons out.ico` to write the multi-size .ico used for the exe.
 """
 import struct
 import sys
@@ -16,6 +16,14 @@ from .accent import windows_accent
 _SIZES = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)
 _ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 256)
 _STROKE = 1.6  # in the 24x24 design grid
+
+# "+" badge in the bottom-right corner; the mouse shrinks toward the top-left to make room.
+_GLYPH_SCALE = 0.8
+_BADGE_CENTER = QPointF(18.4, 18.4)
+_BADGE_RADIUS = 5.3
+_BADGE_GAP = 1.4    # transparent ring that separates the badge from the mouse
+_PLUS_ARM = 2.7
+_PLUS_STROKE = 2.0
 
 
 def _pen(color, width=_STROKE) -> QPen:
@@ -55,9 +63,8 @@ def paint_glyph(p: QPainter, rect: QRectF, color: QColor, fill: QColor = None, w
     p.restore()
 
 
-def _paint_app(p: QPainter, size: int):
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.scale(size / 24, size / 24)
+def _paint_app_glyph(p: QPainter):
+    """The full-color mouse, in the 24x24 grid."""
     blue = QLinearGradient(0, 3.5, 0, 20.5)
     blue.setColorAt(0, QColor("#60CDFF"))
     blue.setColorAt(1, QColor("#0067C0"))
@@ -69,6 +76,42 @@ def _paint_app(p: QPainter, size: int):
     p.setBrush(Qt.BrushStyle.NoBrush)
     p.setPen(_pen(QBrush(blue), 2.2))
     p.drawPath(_chevrons())
+
+
+def _paint_badged(p: QPainter, size: int, paint_mouse, badge: QColor, plus: QColor = None):
+    """Mouse (scaled to the top-left) plus a round "+" badge bottom-right.
+
+    `paint_mouse(p)` draws in the 24x24 grid. With `plus=None` the "+" is cut out of the
+    badge, so it shows whatever is behind the icon (used for the one-color tray icon).
+    Only for images: the transparent gap ring clears pixels.
+    """
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.save()
+    p.scale(size / 24, size / 24)
+    p.save()
+    p.scale(_GLYPH_SCALE, _GLYPH_SCALE)
+    paint_mouse(p)
+    p.restore()
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+    p.setBrush(QColor("black"))
+    p.drawEllipse(_BADGE_CENTER, _BADGE_RADIUS + _BADGE_GAP, _BADGE_RADIUS + _BADGE_GAP)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+    p.setBrush(badge)
+    p.drawEllipse(_BADGE_CENTER, _BADGE_RADIUS, _BADGE_RADIUS)
+
+    if plus is None:
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+    p.setPen(_pen(plus or QColor("black"), _PLUS_STROKE))
+    cx, cy = _BADGE_CENTER.x(), _BADGE_CENTER.y()
+    p.drawLine(QPointF(cx - _PLUS_ARM, cy), QPointF(cx + _PLUS_ARM, cy))
+    p.drawLine(QPointF(cx, cy - _PLUS_ARM), QPointF(cx, cy + _PLUS_ARM))
+    p.restore()
+
+
+def _paint_app(p: QPainter, size: int):
+    _paint_badged(p, size, _paint_app_glyph, QColor("#005FB8"), QColor("white"))
 
 
 def _image(size: int, paint) -> QImage:
@@ -92,20 +135,27 @@ def app_icon() -> QIcon:
 
 
 class _ThemedGlyph(QIconEngine):
-    """Paints the glyph in the current Fluent theme's text color, like FluentIcon does."""
+    """Paints the glyph in the current Fluent theme's text color (or accent), like FluentIcon does."""
+
+    def __init__(self, accent: bool = False):
+        super().__init__()
+        self.accent = accent
 
     def paint(self, painter, rect, mode, state):
-        from qfluentwidgets import isDarkTheme
+        from qfluentwidgets import isDarkTheme, themeColor
 
-        color = QColor(255, 255, 255, 230) if isDarkTheme() else QColor(0, 0, 0, 228)
+        if self.accent:
+            color = themeColor()
+        else:
+            color = QColor(255, 255, 255, 230) if isDarkTheme() else QColor(0, 0, 0, 228)
         paint_glyph(painter, QRectF(rect), color)
 
     def clone(self):
-        return _ThemedGlyph()
+        return _ThemedGlyph(self.accent)
 
 
-def glyph_icon() -> QIcon:
-    return QIcon(_ThemedGlyph())
+def glyph_icon(accent: bool = False) -> QIcon:
+    return QIcon(_ThemedGlyph(accent))
 
 
 def light_taskbar() -> bool:
@@ -124,15 +174,15 @@ def tray_icon(state: str) -> QIcon:
     if state == "off":
         fg.setAlphaF(0.45)
     accent = windows_accent(dark=not light)  # the shade Windows uses on this taskbar
+    color = accent if state == "latched" else fg
 
-    def paint(p, size):
-        rect = QRectF(0, 0, size, size)
+    def mouse(p):
         if state == "latched":
-            paint_glyph(p, rect, accent, fill=accent, wheel=QColor("white"))
+            paint_glyph(p, QRectF(0, 0, 24, 24), accent, fill=accent, wheel=QColor("white"))
         else:
-            paint_glyph(p, rect, fg)
+            paint_glyph(p, QRectF(0, 0, 24, 24), fg)
 
-    return _icon(paint)
+    return _icon(lambda p, size: _paint_badged(p, size, mouse, color))
 
 
 def write_ico(path):
