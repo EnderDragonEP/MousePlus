@@ -10,6 +10,13 @@ from .config import TRIGGER_TEXTS, cfg
 
 _SECONDARY = (QColor(96, 96, 96), QColor(206, 206, 206))  # light, dark
 _CHECK_COLUMN = 26  # a checkable menu insets every item this much to make room for the check marks
+_ITEM_PADDING = 24  # extra room after each item's text, so the menu doesn't end right at the longest one
+
+
+class TrayMenu(CheckableSystemTrayMenu):
+    def _adjustItemText(self, item, action):
+        super()._adjustItemText(item, action)  # sizes the item to fit its text, every time the text changes
+        item.setSizeHint(item.sizeHint() + QSize(_ITEM_PADDING, 0))
 
 
 def active_features() -> list:
@@ -70,7 +77,7 @@ class Tray(QSystemTrayIcon):
         self.updateAction = Action(FIF.UPDATE, "Check for updates", triggered=self._onUpdateAction)
         self.quitAction = Action(FIF.POWER_BUTTON, "Quit", triggered=lambda: self.exitRequested.emit())
 
-        self.menu = CheckableSystemTrayMenu()
+        self.menu = TrayMenu()
         self.menu.addWidget(self.header, selectable=False)
         self.menu.addSeparator()
         self.menu.addAction(self.pauseAction)
