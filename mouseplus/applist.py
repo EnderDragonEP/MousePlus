@@ -60,6 +60,11 @@ class AppListCard(ExpandSettingCard):
         super().showEvent(e)
         self._nameOpenApps()
 
+    def wheelEvent(self, e):
+        # The card is a scroll area (for its expand animation) that swallows the wheel, so the page
+        # wouldn't scroll with the cursor over the open list. Hand the wheel on to the page instead.
+        e.ignore()
+
     def _pick(self):
         picker = AppPicker(set(self.configItem.value), self.window())
         if picker.exec() and picker.program and picker.program not in self.configItem.value:
