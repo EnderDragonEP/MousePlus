@@ -28,6 +28,7 @@ BYPASS_TEXTS = {"alt": "Alt", "ctrl": "Ctrl", "shift": "Shift", "win": "Win", "c
 class Config(QConfig):
     # App-wide
     disableInFullscreen = ConfigItem("General", "DisableInFullscreen", True, BoolValidator())
+    checkUpdates = ConfigItem("General", "CheckForUpdates", True, BoolValidator())  # on startup
     trayHintShown = ConfigItem("General", "TrayHintShown", False, BoolValidator())
 
     # Horizontal Scroll

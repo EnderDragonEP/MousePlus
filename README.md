@@ -37,7 +37,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 - 🚀 **Start with Windows** – An optional toggle, so it's always ready.
 - 📌 **Lives in the tray** – Closing the window keeps it running.
 - 🎨 **Feels like a native app** – Fluent Design with Mica, light/dark mode and your accent color, updated live.
-- 🔔 **Update check** – See if a new version is out, right from the General tab.
+- 🔔 **Update check** – On startup, Mouse Plus asks GitHub whether a new version is out and lets you know with a notification, or a message in the window if it's open. You can turn this off, or check any time, in the General tab.
 
 ## Limitations
 

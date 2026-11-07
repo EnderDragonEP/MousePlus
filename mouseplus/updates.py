@@ -3,12 +3,15 @@ import json
 import re
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QObject, QUrl, pyqtSignal
+from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 from . import REPO_URL, __version__
 
 LATEST_RELEASE_API = REPO_URL.replace("https://github.com/", "https://api.github.com/repos/") + "/releases/latest"
+# Seconds after startup for the first check, and before each retry if a check fails:
+# right after signing in to Windows, the network may not be up yet.
+STARTUP_DELAYS = (10, 60, 300)
 
 
 def parse_version(text: str) -> tuple:
@@ -63,3 +66,36 @@ class UpdateChecker(QObject):
             self.finished.emit(Release(version_from_tag(data["tag_name"]), data["html_url"]))
         except (ValueError, KeyError, TypeError, AttributeError):
             self.failed.emit("GitHub sent an unexpected response.")
+
+
+class StartupCheck(QObject):
+    """The quiet check after startup: it only reports a newer version, and a failed check is
+    retried a few times, then dropped without a message."""
+
+    available = pyqtSignal(object)  # Release
+
+    def __init__(self, enabled, parent=None, checker=None, delays=STARTUP_DELAYS):
+        super().__init__(parent)
+        self._enabled = enabled  # callable: the setting, read again before each check and before reporting
+        self._delays = delays
+        self._tries = 0
+        self._checker = checker or UpdateChecker(self)
+        self._checker.finished.connect(self._onFinished)
+        self._checker.failed.connect(self._schedule)
+        self._timer = QTimer(self, singleShot=True, timeout=self._check)
+
+    def start(self):
+        self._schedule()
+
+    def _schedule(self, *_):
+        if self._tries < len(self._delays):
+            self._timer.start(int(self._delays[self._tries] * 1000))
+            self._tries += 1
+
+    def _check(self):
+        if self._enabled():
+            self._checker.check()
+
+    def _onFinished(self, release):
+        if release is not None and is_newer(release.version) and self._enabled():
+            self.available.emit(release)

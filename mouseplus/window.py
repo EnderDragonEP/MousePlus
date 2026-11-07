@@ -1,15 +1,17 @@
 """Settings window: one tab per feature in a left rail (PyQt6-Fluent-Widgets MSFluentWindow, Mica on Windows 11)."""
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
-from PyQt6.QtWidgets import QHBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, FluentIcon as FIF, HyperlinkLabel, InfoBar,
-                            InfoBarPosition, MessageBox, MSFluentWindow, NavigationItemPosition,
-                            PrimaryPushSettingCard, RangeSettingCard, ScrollArea, SettingCard, SettingCardGroup,
-                            SwitchSettingCard, TitleLabel, setCustomStyleSheet, setFont)
+                            InfoBarIcon, InfoBarPosition, MessageBox, MSFluentWindow, NavigationItemPosition,
+                            PrimaryPushSettingCard, PushButton, RangeSettingCard, ScrollArea, SettingCard,
+                            SettingCardGroup, SwitchSettingCard, TitleLabel, setCustomStyleSheet, setFont)
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
 from .config import BYPASS_TEXTS, DURATION_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
 from .updates import UpdateChecker, is_newer
+
+LICENSES_URL = f"{REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md"
 
 
 class Group(SettingCardGroup):
@@ -43,22 +45,31 @@ class MultiplierCard(RangeSettingCard):
 
 
 class AboutCard(PrimaryPushSettingCard):
-    """App name, then the version with a "View source" link, plus the update button."""
+    """App name, then the version with "View source" and "Licenses" links, plus the update button."""
 
     def __init__(self, parent=None):
-        super().__init__("Check for updates", icons.app_icon(), APP_NAME, f"Version {__version__}  ·", parent)
-        self.sourceLink = HyperlinkLabel(QUrl(REPO_URL), "View source", self)
-        # Match the description text; the card's QPushButton rule would make the link 14 px.
-        link_size = "HyperlinkLabel { font-size: 11px; }"
-        setCustomStyleSheet(self.sourceLink, link_size, link_size)
-        # Put the link on the version line, next to the card's description.
+        super().__init__("Check for updates", icons.app_icon(), APP_NAME, f"Version {__version__}", parent)
+        self.sourceLink = self._link(REPO_URL, "View source")
+        self.licensesLink = self._link(LICENSES_URL, "Licenses")
+        # Put the links on the version line, after the card's description: "Version · link · link".
         row = QHBoxLayout()
         row.setSpacing(6)
         self.vBoxLayout.removeWidget(self.contentLabel)
         row.addWidget(self.contentLabel, 0, Qt.AlignmentFlag.AlignVCenter)
-        row.addWidget(self.sourceLink, 0, Qt.AlignmentFlag.AlignVCenter)
+        for link in (self.sourceLink, self.licensesLink):
+            dot = QLabel("·", self)
+            dot.setObjectName("contentLabel")  # styled like the version text
+            row.addWidget(dot, 0, Qt.AlignmentFlag.AlignVCenter)
+            row.addWidget(link, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addStretch(1)
         self.vBoxLayout.addLayout(row)
+
+    def _link(self, url: str, text: str) -> HyperlinkLabel:
+        link = HyperlinkLabel(QUrl(url), text, self)
+        # Match the description text; the card's QPushButton rule would make the link 14 px.
+        size = "HyperlinkLabel { font-size: 11px; }"
+        setCustomStyleSheet(link, size, size)
+        return link
 
 
 class Page(ScrollArea):
@@ -239,7 +250,10 @@ class GeneralPage(Page):
 
         self.about = Group("About", self.view)
         self.aboutCard = AboutCard(self.about)
-        self.about.addSettingCard(self.aboutCard)
+        self.updateCard = SwitchSettingCard(
+            FIF.UPDATE, "Check for updates on startup", "Get a notification when a new version is out",
+            cfg.checkUpdates, self.about)
+        self.about.addSettingCards([self.aboutCard, self.updateCard])
 
         self.addWidgets(self.general, self.about)
         self.setHint("Settings for the whole app. Right-click the tray icon to pause every feature at once.")
@@ -320,6 +334,17 @@ class SettingsWindow(MSFluentWindow):
         box.cancelButton.setText("Later")
         if box.exec():
             QDesktopServices.openUrl(QUrl(release.url))
+
+    def showUpdateAvailable(self, release):
+        """The startup check found a newer version while the window is open: say so in the window."""
+        bar = InfoBar(InfoBarIcon.INFORMATION, f"Version {release.version} is available",
+                      f"You have version {__version__}.", isClosable=True, duration=-1,
+                      position=InfoBarPosition.TOP, parent=self)
+        download = PushButton("Download", bar)
+        download.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(release.url)))
+        download.clicked.connect(bar.close)
+        bar.addWidget(download)
+        bar.show()
 
     def _onUpdateFailed(self, message: str):
         self._setChecking(False)

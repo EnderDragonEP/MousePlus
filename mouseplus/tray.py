@@ -1,6 +1,6 @@
 """Notification-area icon with a Fluent menu: a status header, quick actions and app commands."""
-from PyQt6.QtCore import QSize, pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QSize, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import QSystemTrayIcon, QVBoxLayout, QWidget
 from qfluentwidgets import (Action, BodyLabel, CaptionLabel, FluentIcon as FIF, StrongBodyLabel, SystemTrayMenu,
                             qconfig, setFont, themeColor)
@@ -55,6 +55,7 @@ class Tray(QSystemTrayIcon):
         super().__init__(parent)
         self._latched = False
         self._paused = False
+        self._messageUrl = None  # opened when the latest notification is selected
 
         self.header = StatusHeader()
         self.pauseAction = Action(FIF.PAUSE, "Pause Mouse Plus", triggered=lambda: self.pauseRequested.emit())
@@ -76,9 +77,15 @@ class Tray(QSystemTrayIcon):
         self.setContextMenu(self.menu)
 
         self.activated.connect(self._onActivated)
+        self.messageClicked.connect(self._onMessageClicked)
         for item in (*cfg.featureItems(), cfg.toggleMode, cfg.trigger):
             item.valueChanged.connect(self.refresh)
         self.refresh()
+
+    def notify(self, title: str, text: str, icon=None, msecs: int = 5000, url: str = None):
+        """Show a Windows notification (the app icon unless `icon` is given); selecting it opens `url`."""
+        self._messageUrl = url
+        self.showMessage(title, text, icons.app_icon() if icon is None else icon, msecs)
 
     def setLatched(self, on: bool):
         self._latched = on
@@ -135,3 +142,7 @@ class Tray(QSystemTrayIcon):
     def _onActivated(self, reason):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.settingsRequested.emit()
+
+    def _onMessageClicked(self):
+        if self._messageUrl:
+            QDesktopServices.openUrl(QUrl(self._messageUrl))

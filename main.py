@@ -19,6 +19,7 @@ from mouseplus.config import cfg
 from mouseplus.hook import MouseHook
 from mouseplus.osd import Osd
 from mouseplus.tray import Tray
+from mouseplus.updates import StartupCheck
 from mouseplus.window import SettingsWindow
 
 log = logging.getLogger("mouseplus")
@@ -104,6 +105,7 @@ class App(QObject):
         self.accentTimer = QTimer(self, singleShot=True, interval=300, timeout=self._onAccentChanged)
         # Plugging in, removing or rearranging monitors also arrives as a burst of signals.
         self.screensTimer = QTimer(self, singleShot=True, interval=300, timeout=self._onScreensChanged)
+        self.startupCheck = StartupCheck(lambda: cfg.checkUpdates.value, self)
         self.server = QLocalServer(self)
         self.server.listen(SERVER_NAME)
 
@@ -111,6 +113,7 @@ class App(QObject):
         self.window.hiddenToTray.connect(self._onHiddenToTray)
         self.tray.settingsRequested.connect(self.window.present)
         self.tray.updateCheckRequested.connect(self._checkForUpdates)
+        self.startupCheck.available.connect(self._onUpdateAvailable)
         self.tray.pauseRequested.connect(self._togglePause)
         self.tray.exitRequested.connect(qapp.quit)
         self.hook.latchedChanged.connect(self._onLatched)
@@ -132,10 +135,11 @@ class App(QObject):
         self._apply()
         if show_window:
             self.window.present()
+        if cfg.checkUpdates.value:
+            self.startupCheck.start()
         if signal_running_instance(OLD_SERVER_NAME, show=False):
-            self.tray.showMessage(APP_NAME, "Horizontal Scroll is still running. Quit it from its tray icon, "
-                                            "so the two apps don't both react to the mouse.",
-                                  self.window.windowIcon(), 8000)
+            self.tray.notify(APP_NAME, "Horizontal Scroll is still running. Quit it from its tray icon, "
+                                       "so the two apps don't both react to the mouse.", msecs=8000)
 
     def _apply(self, *_):
         if not self.paused and config.any_feature_on():
@@ -163,6 +167,14 @@ class App(QObject):
         self.window.present()  # the result is shown in the window
         self.window.checkForUpdates()
 
+    def _onUpdateAvailable(self, release):
+        """The startup check found a newer version: say so in the window if it's open, else with a notification."""
+        if self.window.isVisible() and not self.window.isMinimized():
+            self.window.showUpdateAvailable(release)
+        else:
+            self.tray.notify(f"{APP_NAME} {release.version} is available",
+                             "Select to see what's new and download it.", msecs=10000, url=release.url)
+
     def _onAccentChanged(self):
         sync_accent()
         self.tray.refresh()
@@ -175,12 +187,12 @@ class App(QObject):
     def _onHiddenToTray(self):
         if not cfg.trayHintShown.value:
             qconfig.set(cfg.trayHintShown, True)
-            self.tray.showMessage(APP_NAME, "Still running in the notification area. Right-click the icon to exit.",
-                                  self.window.windowIcon(), 4000)
+            self.tray.notify(APP_NAME, "Still running in the notification area. Right-click the icon to exit.",
+                             msecs=4000)
 
     def _onHookFailed(self, message: str):
         log.error(message)
-        self.tray.showMessage(APP_NAME, message, QSystemTrayIcon.MessageIcon.Warning, 5000)
+        self.tray.notify(APP_NAME, message, QSystemTrayIcon.MessageIcon.Warning, 5000)
 
     def _onConnection(self):
         sock = self.server.nextPendingConnection()

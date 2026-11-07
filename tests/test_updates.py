@@ -1,6 +1,12 @@
+import time
 import unittest
 
-from mouseplus.updates import is_newer, parse_version, version_from_tag
+from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
+
+from mouseplus import __version__
+from mouseplus.updates import Release, StartupCheck, is_newer, parse_version, version_from_tag
+
+app = QCoreApplication.instance() or QCoreApplication([])  # for the startup check's timer and signals
 
 
 class UpdateVersionTest(unittest.TestCase):
@@ -23,6 +29,61 @@ class UpdateVersionTest(unittest.TestCase):
         self.assertFalse(is_newer("1.0.0", "1.0.0"))
         self.assertFalse(is_newer("v1.0", "1.0.0"))
         self.assertFalse(is_newer("0.9.0", "1.0.0"))
+
+
+class FakeChecker(QObject):
+    """Answers each check with the next scripted result: a Release, None (nothing published) or an error text."""
+
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, results):
+        super().__init__()
+        self.results = list(results)
+        self.calls = 0
+
+    def check(self):
+        self.calls += 1
+        result = self.results.pop(0)
+        if isinstance(result, str):
+            self.failed.emit(result)
+        else:
+            self.finished.emit(result)
+
+
+class StartupCheckTest(unittest.TestCase):
+    NEWER = Release("99.0.0", "https://example.com/release")
+
+    def run_startup(self, results, enabled=lambda: True):
+        """Run a startup check against scripted results; return (checks made, versions reported)."""
+        checker = FakeChecker(results)
+        check = StartupCheck(enabled, checker=checker, delays=(0, 0, 0))
+        reported = []
+        check.available.connect(lambda release: reported.append(release.version))
+        check.start()
+        end = time.monotonic() + 0.3
+        while time.monotonic() < end:
+            app.processEvents()
+            time.sleep(0.005)
+        return checker.calls, reported
+
+    def test_reports_a_newer_version(self):
+        self.assertEqual(self.run_startup([self.NEWER]), (1, ["99.0.0"]))
+
+    def test_quiet_when_up_to_date_or_nothing_published(self):
+        self.assertEqual(self.run_startup([Release(__version__, "url")]), (1, []))
+        self.assertEqual(self.run_startup([None]), (1, []))
+
+    def test_retries_a_failed_check_a_few_times(self):
+        self.assertEqual(self.run_startup(["offline", "offline", self.NEWER]), (3, ["99.0.0"]))
+        self.assertEqual(self.run_startup(["offline"] * 5), (3, []))  # then gives up quietly
+
+    def test_turned_off_means_no_check(self):
+        self.assertEqual(self.run_startup([self.NEWER], enabled=lambda: False), (0, []))
+
+    def test_turned_off_while_checking_means_no_report(self):
+        answers = iter([True, False])  # on when the check starts, off when the answer arrives
+        self.assertEqual(self.run_startup([self.NEWER], enabled=lambda: next(answers)), (1, []))
 
 
 if __name__ == "__main__":
