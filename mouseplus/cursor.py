@@ -119,7 +119,8 @@ def map_crossing(monitors: Sequence[Rect], source: int, x: int, y: int) -> Optio
     """Where the cursor should land when a move to (x, y) leaves monitor `source`.
 
     Returns (x, y, target monitor index), or None to let Windows handle the move
-    (the point is still inside, or nothing borders that edge).
+    (the point is still inside, nothing borders that edge, or it lands on a monitor
+    that doesn't border it, which only an absolute move can do).
     """
     edge = crossed_edge(monitors[source], x, y)
     if edge is None:
@@ -127,6 +128,9 @@ def map_crossing(monitors: Sequence[Rect], source: int, x: int, y: int) -> Optio
     src, dst = edge_groups(monitors, source, edge)
     if not dst:
         return None
+    landed = monitor_at(monitors, x, y)
+    if landed is not None and landed not in dst:
+        return None  # it jumped onto a monitor that doesn't border this edge: an absolute move, leave it
     span = _EDGES[edge][0]
     vertical = edge in ("left", "right")
     along = y if vertical else x

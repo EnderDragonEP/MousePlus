@@ -32,15 +32,19 @@ def route_wheel(event: WheelEvent, fullscreen: Callable[[], bool], elevated: Cal
                 excluded: Callable[[], bool] = lambda: False) -> Decision:
     """First match wins:
 
+    0. No delta at all (some drivers send these): pass untouched, without stopping anything.
     1. Back/Forward + wheel, or a latched toggle: Horizontal Scroll, unchanged.
     2. Full-screen app in front: pass.
     3. Bypass keys held: pass untouched (normal notches, the app's own Alt+wheel and so on).
     4. Ctrl held: pass. Zoom is step-based; smoothing or inertia would overshoot.
     5. Smooth Scroll off, a finer-than-notch delta (hi-res wheel, touchpad), an app on the
-       list under the cursor (e.g. an image viewer that flips an image per wheel message)
-       or an elevated window there (Windows blocks injected input): pass.
+       list or the taskbar under the cursor (e.g. an image viewer that flips an image per
+       wheel message) or an elevated window there (Windows blocks injected input): pass,
+       and stop any glide, since the user now scrolls some other way.
     6. Otherwise Smooth Scroll.
     """
+    if not event.delta:
+        return Decision(PASS)
     if event.horizontal:
         return Decision(HORIZONTAL, stop=True)
     if fullscreen():
@@ -50,5 +54,5 @@ def route_wheel(event: WheelEvent, fullscreen: Callable[[], bool], elevated: Cal
     if "ctrl" in event.modifiers:
         return Decision(PASS, stop=True)
     if not event.smooth or event.delta % NOTCH or excluded() or elevated():
-        return Decision(PASS)
+        return Decision(PASS, stop=True)
     return Decision(SMOOTH)

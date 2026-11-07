@@ -47,6 +47,7 @@ class AppListCard(ExpandSettingCard):
         self.configItem = configItem
         self.namesItem = namesItem
         self.items = {}
+        self._nameless = set()  # listed programs that turned out to have no name to read: don't look again
         self.addButton = PushButton("Add app", self, FIF.ADD)
         self.addButton.clicked.connect(self._pick)
         self.addWidget(self.addButton)
@@ -85,15 +86,20 @@ class AppListCard(ExpandSettingCard):
     def _nameOpenApps(self):
         """Name the listed apps whose name isn't known yet (added before names were kept) if they're open now."""
         unnamed = {program for program in self.configItem.value if program_label(program) == program}
+        unnamed -= self._nameless
         if not unnamed:
             return
         for path, _ in winapi.open_apps():
             program = os.path.basename(path).lower()
-            name = winapi.program_description(path) if program in unnamed else ""
+            if program not in unnamed:
+                continue
+            name = winapi.program_description(path)
             if name:
                 self._setName(program, name)
                 self.items[program].refresh()
-                unnamed.discard(program)
+            else:
+                self._nameless.add(program)
+            unnamed.discard(program)
 
     def _addItem(self, program: str):
         item = AppItem(program, self.view)

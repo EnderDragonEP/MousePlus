@@ -57,18 +57,22 @@ class RouteWheelTest(unittest.TestCase):
         self.assertEqual(route(modifiers={"shift"}), Decision(SMOOTH))
 
     def test_smooth_scroll_off_passes(self):
-        self.assertEqual(route(smooth=False, elevated=None), Decision(PASS))
+        self.assertEqual(route(smooth=False, elevated=None), Decision(PASS, stop=True))
 
-    def test_fine_deltas_pass(self):
-        for delta in (15, -40, 119, 121):
-            self.assertEqual(route(delta=delta, elevated=None), Decision(PASS))
+    def test_fine_deltas_pass_and_stop_a_glide(self):
+        for delta in (15, -40, 119, 121):  # a touchpad or hi-res wheel: the user scrolls some other way now
+            self.assertEqual(route(delta=delta, elevated=None), Decision(PASS, stop=True))
         self.assertEqual(route(delta=240), Decision(SMOOTH))  # two notches at once
 
+    def test_zero_delta_passes_untouched(self):
+        for rule in (dict(), dict(horizontal=True), dict(modifiers=ALT)):
+            self.assertEqual(route(delta=0, **rule, fullscreen=None, elevated=None, excluded=None), Decision(PASS))
+
     def test_elevated_window_passes(self):
-        self.assertEqual(route(elevated=True), Decision(PASS))
+        self.assertEqual(route(elevated=True), Decision(PASS, stop=True))
 
     def test_app_on_the_list_passes(self):
-        self.assertEqual(route(excluded=True, elevated=None), Decision(PASS))  # no need to look further
+        self.assertEqual(route(excluded=True, elevated=None), Decision(PASS, stop=True))  # no need to look further
 
     def test_app_list_is_only_checked_for_plain_notches(self):
         for rule in (dict(horizontal=True, fullscreen=None), dict(fullscreen=True), dict(modifiers=ALT),

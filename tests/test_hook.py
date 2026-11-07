@@ -1,20 +1,31 @@
-"""The output thread's decision to keep a glide going when the cursor moves to another window.
+"""Decisions the hook makes with Win32's answers: carrying a glide into another window, crossing
+monitors, the overscroll bounce and the taskbar.
 
-Win32 is faked: two top-level windows, A where the flick started and B, with whatever program,
-class and state each test gives B. No hook is installed and no input is sent.
+Win32 is faked in every test: no hook is installed, no input is sent and no window moves.
 """
+import ctypes
 import unittest
 from unittest import mock
 
 from PyQt6.QtCore import QCoreApplication
 
-from mouseplus import winapi as w
+from mouseplus import bounce, winapi as w
+from mouseplus.cursor import Rect
 from mouseplus.hook import HookSettings, MouseHook
 from mouseplus.smooth import FRAME, SmoothSettings
 
 app = QCoreApplication.instance() or QCoreApplication([])
 A, B = 1001, 2002
 NONE = frozenset()
+LAPTOP, SIDE = Rect(0, 0, 2560, 1600), Rect(2560, 155, 5120, 1595)
+
+
+def fake(test, **fakes):
+    """Replace winapi functions for the length of a test."""
+    for name, function in fakes.items():
+        patcher = mock.patch.object(w, name, side_effect=function)
+        patcher.start()
+        test.addCleanup(patcher.stop)
 
 
 class CarryTest(unittest.TestCase):
@@ -94,6 +105,101 @@ class CarryTest(unittest.TestCase):
                 self.hook._perform(("smooth", -120, self.now, B, NONE))
                 remaining = abs(self.hook._scroller.remaining)
                 self.assertEqual(remaining > 120, carry)  # without carry, only the new notch is left
+
+
+class MoveTest(unittest.TestCase):
+    """Monitor Cursor: which moves across an edge land proportionally. The cursor starts on the
+    laptop near its right edge; the side monitor is to its right, 155 px lower."""
+
+    def setUp(self):
+        self.clip = Rect(-10_000, -10_000, 10_000, 10_000)  # the cursor isn't confined
+        self.landed = []
+
+        def get_cursor_pos(ref):
+            self.hook._pos.x, self.hook._pos.y = 2550, 800
+            return True
+
+        fake(self, GetCursorPos=get_cursor_pos, cursor_clip=lambda: self.clip,
+             SetCursorPos=lambda x, y: self.landed.append((x, y)) or True)
+        self.hook = MouseHook()
+        self.hook._settings = HookSettings(cursor=True, skip_fullscreen=False)
+        self.hook._monitors = (LAPTOP, SIDE)
+
+    def move(self, x, y, flags=0, extra=0):
+        info = w.MSLLHOOKSTRUCT()
+        info.pt.x, info.pt.y, info.flags, info.dwExtraInfo = x, y, flags, extra
+        return self.hook._move(ctypes.addressof(info))
+
+    def test_the_mouse_crosses_proportionally(self):
+        self.assertTrue(self.move(2565, 800))  # swallowed and placed instead
+        self.assertEqual(self.landed, [(2565, 155 + 720)])  # halfway down, halfway down
+
+    def test_pen_touch_and_software_moves_go_where_they_point(self):
+        for kind, flags, extra in (("software", w.LLMHF_INJECTED, 0), ("pen", 0, 0xFF515700),
+                                   ("touch", 0, 0xFF515780)):
+            with self.subTest(kind):
+                self.assertFalse(self.move(2565, 800, flags, extra))
+        self.assertEqual(self.landed, [])
+
+    def test_a_confined_cursor_is_left_to_windows(self):
+        self.clip = LAPTOP  # a game keeps the cursor on the laptop
+        self.assertFalse(self.move(2565, 800))
+        self.assertEqual(self.landed, [])
+
+
+class BounceTest(unittest.TestCase):
+    """The overscroll bounce moves the window with queued (asynchronous) moves."""
+
+    def setUp(self):
+        self.at = (100, 100)  # where the window really is
+        self.asked = []
+        fake(self, window_position=lambda hwnd: self.at, move_window=lambda hwnd, x, y: self.asked.append((x, y)))
+        self.now = 0.0
+        clock = mock.patch("mouseplus.hook.time", **{"perf_counter.side_effect": lambda: self.now})
+        clock.start()
+        self.addCleanup(clock.stop)
+        hook = self.hook = MouseHook()
+        hook._bounce = bounce.Bounce(7, 100, 100, -1, 12, 0.0)
+        hook._bounce_at, hook._bounce_trail = (100, 100), {(100, 100)}
+
+    def test_a_move_still_on_its_way_doesnt_end_the_bounce(self):
+        self.now = 0.03
+        self.hook._bounce_frame()  # asks to move the window up
+        self.assertEqual(len(self.asked), 1)
+        self.now = 0.15  # the window's thread still hasn't moved it
+        self.hook._bounce_frame()
+        self.assertIsNotNone(self.hook._bounce)
+        self.assertEqual(len(self.asked), 2)
+
+    def test_it_ends_back_where_it_started(self):
+        for self.now in (0.03, 0.1, 0.2, 0.3):
+            self.hook._bounce_frame()
+        self.assertIsNone(self.hook._bounce)
+        self.assertEqual(self.asked[-1], (100, 100))
+
+    def test_a_move_by_someone_else_ends_it_there(self):
+        self.now = 0.03
+        self.hook._bounce_frame()
+        self.at = (300, 250)  # the user dragged the window away
+        self.hook._bounce_frame()
+        self.assertIsNone(self.hook._bounce)
+        self.assertEqual(len(self.asked), 1)  # and it isn't moved back
+
+
+class TaskbarTest(unittest.TestCase):
+    def setUp(self):
+        self.root_class = "Shell_TrayWnd"
+        fake(self, window_at=lambda x, y: 5, GetAncestor=lambda hwnd, flag: 6, root_window_at=lambda x, y: 6,
+             window_class=lambda hwnd: self.root_class, program_name=lambda hwnd: "explorer.exe",
+             window_is_elevated=lambda hwnd: False, held_modifiers=lambda: NONE)
+        self.hook = MouseHook()
+        self.hook._settings = HookSettings(smooth=SmoothSettings(), skip_fullscreen=False)
+        self.hook._send = lambda action: None
+
+    def test_the_taskbar_scrolls_normally(self):
+        self.assertFalse(self.hook._wheel(-120, 10, 10))  # passed on as one notch
+        self.root_class, self.hook._programs = "CabinetWClass", {}  # a File Explorer window instead
+        self.assertTrue(self.hook._wheel(-120, 10, 10))  # smoothed
 
 
 if __name__ == "__main__":

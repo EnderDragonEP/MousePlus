@@ -83,6 +83,12 @@ class OtherLayoutsTest(unittest.TestCase):
         b = Rect(1920, 1080, 3840, 2160)  # touches only at a corner
         self.assertIsNone(map_crossing([a, b], 0, 1920, 500))
 
+    def test_a_jump_onto_a_monitor_further_away_is_left_alone(self):
+        left, middle, right = Rect(0, 0, 1920, 1080), Rect(1920, 0, 3840, 1080), Rect(3840, 0, 5760, 1080)
+        monitors = [left, middle, right]
+        self.assertIsNone(map_crossing(monitors, 0, 4500, 500))  # a pen tap or remote jump onto the right one
+        self.assertEqual(map_crossing(monitors, 0, 1925, 540), (1925, 540, 1))  # a mouse crossing still maps
+
     def test_gap_between_neighbours_picks_the_nearest(self):
         tall = Rect(0, 0, 1000, 3000)
         upper = Rect(1000, 0, 2000, 1000)

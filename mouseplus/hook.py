@@ -26,6 +26,18 @@ _NOWHERE = Rect(0, 0, 0, 0)
 _EDGE_EVERY = 4            # frames between overscroll edge checks while a motion runs
 _EDGE_MIN = 30             # units of motion left that still make a bounce
 _BUTTON_DOWNS = {0x0201, 0x0204, 0x0207}  # left, right, middle: a click stops inertia
+_TASKBAR = "<taskbar>"     # the "program" of taskbar windows in the program cache
+
+
+def _program_of(hwnd) -> str:
+    """The program file of a window, or _TASKBAR for the taskbar: Smooth Scroll stays out of it like
+    an app on the list, since nothing there scrolls and the volume icon may react to every small step."""
+    if not hwnd:
+        return ""
+    root = w.GetAncestor(hwnd, w.GA_ROOT)
+    if root and w.window_class(root) in w.TASKBAR_CLASSES:
+        return _TASKBAR
+    return w.program_name(hwnd)
 
 
 @dataclass(frozen=True)
@@ -84,6 +96,7 @@ class MouseHook(QObject):
         self._gesture = None          # (root window, modifiers) the animation started with
         self._bounce = None           # the overscroll bounce playing, output thread only
         self._bounce_at = None        # where the bounce last put the window
+        self._bounce_trail = set()    # every spot the bounce asked for; moves land asynchronously
         self._frames = 0
 
     @property
@@ -238,10 +251,13 @@ class MouseHook(QObject):
             x, y, scale = place
             self._bounce = bounce.Bounce(root, x, y, direction, bounce.AMPLITUDE * scale, time.perf_counter())
             self._bounce_at = (x, y)
+            self._bounce_trail = {(x, y)}
 
     def _bounce_frame(self):
         b = self._bounce
-        if w.window_position(b.window) != self._bounce_at:  # moved by someone else: leave it there
+        # A move is only queued to the window's own thread, so it may still be at an earlier spot
+        # we asked for. Anywhere else means someone else moved it: leave it there.
+        if w.window_position(b.window) not in self._bounce_trail:
             self._bounce = None
             return
         position = b.position(time.perf_counter())
@@ -252,6 +268,7 @@ class MouseHook(QObject):
         if position != self._bounce_at:
             w.move_window(b.window, *position)
             self._bounce_at = position
+            self._bounce_trail.add(position)
 
     # -- hook thread -----------------------------------------------------
 
@@ -319,9 +336,13 @@ class MouseHook(QObject):
             if not self._locate(self._pos.x, self._pos.y):
                 return False
             current = self._current
-        pt = w.MSLLHOOKSTRUCT.from_address(lparam).pt
-        x, y = pt.x, pt.y
+        info = w.MSLLHOOKSTRUCT.from_address(lparam)
+        x, y = info.pt.x, info.pt.y
         if current.left <= x < current.right and current.top <= y < current.bottom:
+            return False
+        # Pen and touch, and software that moves the cursor (remote-control tools, AutoHotkey), put it
+        # exactly where they mean to: only the mouse's own relative moves cross proportionally.
+        if info.flags & w.LLMHF_INJECTED or (info.dwExtraInfo & w.PEN_SIGNATURE_MASK) == w.PEN_SIGNATURE:
             return False
         return self._cross(x, y)
 
@@ -344,6 +365,9 @@ class MouseHook(QObject):
         if target is None:  # nothing borders that edge: Windows clips the move
             return False
         tx, ty, index = target
+        clip = w.cursor_clip()
+        if clip is not None and not clip.contains(tx, ty):
+            return False  # an app (a game, say) confines the cursor: leave the move to Windows
         w.SetCursorPos(tx, ty)
         self._current, self._current_index = self._monitors[index], index
         return True
@@ -387,14 +411,13 @@ class MouseHook(QObject):
             return self._elevation[root]
 
         def excluded():
-            if not settings.excluded:
-                return False
             hwnd = w.window_at(x, y)
             if hwnd not in self._programs:
                 if len(self._programs) > 64:
                     self._programs.clear()
-                self._programs[hwnd] = w.program_name(hwnd) if hwnd else ""
-            return self._programs[hwnd] in settings.excluded
+                self._programs[hwnd] = _program_of(hwnd)
+            program = self._programs[hwnd]
+            return program == _TASKBAR or program in settings.excluded
 
         decision = route_wheel(
             WheelEvent(delta, self._engine.claims_wheel(), modifiers, settings.smooth is not None, settings.bypass),

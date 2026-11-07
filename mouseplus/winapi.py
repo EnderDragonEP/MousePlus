@@ -59,6 +59,10 @@ WS_EX_TOOLWINDOW = 0x00000080
 GW_OWNER = 4
 DWMWA_CLOAKED = 14
 
+LLMHF_INJECTED = 0x00000001  # MSLLHOOKSTRUCT.flags: the event came from SendInput, not a device
+# Mouse messages made from pen or touch input carry this signature in dwExtraInfo (MI_WP_SIGNATURE).
+PEN_SIGNATURE, PEN_SIGNATURE_MASK = 0xFF515700, 0xFFFFFF00
+
 # Tags every event we inject (dwExtraInfo) so our own hook lets it through. Keep the value:
 # Horizontal Scroll used the same tag, so an old copy and Mouse Plus ignore each other's events.
 MAGIC = 0x48534352
@@ -158,6 +162,7 @@ GetWindowLongW = _fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, cty
 AllowSetForegroundWindow = _fn(user32, "AllowSetForegroundWindow", wintypes.BOOL, wintypes.DWORD)
 SetCursorPos = _fn(user32, "SetCursorPos", wintypes.BOOL, ctypes.c_int, ctypes.c_int)
 GetCursorPos = _fn(user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintypes.POINT))
+GetClipCursor = _fn(user32, "GetClipCursor", wintypes.BOOL, ctypes.POINTER(wintypes.RECT))
 EnumDisplayMonitors = _fn(user32, "EnumDisplayMonitors", wintypes.BOOL,
                           wintypes.HDC, ctypes.POINTER(wintypes.RECT), MONITORENUMPROC, wintypes.LPARAM)
 GetCurrentThreadId = _fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
@@ -399,6 +404,12 @@ def cursor_pos() -> tuple:
     point = wintypes.POINT()
     GetCursorPos(ctypes.byref(point))
     return point.x, point.y
+
+
+def cursor_clip():
+    """The rectangle the cursor is confined to: the whole screen, unless an app (a game, say) clips it."""
+    rect = wintypes.RECT()
+    return Rect(rect.left, rect.top, rect.right, rect.bottom) if GetClipCursor(ctypes.byref(rect)) else None
 
 
 def monitor_rects() -> list:
