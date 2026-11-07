@@ -188,7 +188,7 @@ class BounceTest(unittest.TestCase):
 
 
 class SidewaysTest(unittest.TestCase):
-    """Back/Forward + wheel with smooth sideways scrolling on."""
+    """Back/Forward + wheel while Scroll Inertia is on."""
 
     def setUp(self):
         self.program = "code.exe"
@@ -202,8 +202,8 @@ class SidewaysTest(unittest.TestCase):
         clock.start()
         self.addCleanup(clock.stop)
         hook = self.hook = MouseHook()
-        hook._settings = HookSettings(smooth=SmoothSettings(), smooth_sideways=True,
-                                      excluded=frozenset({"xnviewmp.exe"}), skip_fullscreen=False)
+        hook._settings = HookSettings(smooth=SmoothSettings(), excluded=frozenset({"xnviewmp.exe"}),
+                                      skip_fullscreen=False)
         hook._send = self.sent.append
         hook._perform(("settings", SmoothSettings()))
 
@@ -222,12 +222,12 @@ class SidewaysTest(unittest.TestCase):
         self.assertEqual(self.sent[-1][:2], ("hsmooth", 120))  # wheel down scrolls right
         self.assertNotIn(("stop",), self.sent)  # the output thread stops the vertical motion itself
 
-    def test_plain_steps_in_apps_on_the_list_or_when_switched_off(self):
+    def test_plain_steps_in_apps_on_the_list_or_with_scroll_inertia_off(self):
         self.program = "xnviewmp.exe"
         self.scroll_sideways()
         self.assertEqual(self.sent[-1], ("hwheel", 120))
         self.program, self.hook._programs = "code.exe", {}
-        self.hook._settings = HookSettings(smooth=SmoothSettings(), smooth_sideways=False, skip_fullscreen=False)
+        self.hook._settings = HookSettings(smooth=None, skip_fullscreen=False)
         self.scroll_sideways()
         self.assertEqual(self.sent[-1], ("hwheel", 120))
 

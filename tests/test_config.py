@@ -19,14 +19,6 @@ class SmoothSettingsTest(unittest.TestCase):
         self.set(smoothGlide="long")
         self.assertEqual((smooth_settings().free_spin, smooth_settings().glide), (False, GLIDES["long"]))
 
-    def test_sideways_gets_inertia_with_smooth_scroll_unless_turned_off(self):
-        self.set(smoothEnabled=True)
-        self.assertTrue(hook_settings().smooth_sideways)  # on by default
-        self.set(smoothSideways=False)
-        self.assertFalse(hook_settings().smooth_sideways)
-        self.set(smoothSideways=True, smoothEnabled=False)
-        self.assertFalse(hook_settings().smooth_sideways)
-
     def test_off_means_the_wheel_isnt_touched(self):
         self.set(smoothEnabled=False)
         self.assertIsNone(smooth_settings())

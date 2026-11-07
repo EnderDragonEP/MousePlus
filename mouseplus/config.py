@@ -96,7 +96,6 @@ class Config(QConfig):
     smoothEnabled = ConfigItem("SmoothScroll", "Enabled", False, BoolValidator())  # the Inertia switch
     smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDE_TEXTS)))
     smoothFlick = RangeConfigItem("SmoothScroll", "FlickNotches", 3, RangeValidator(2, 6))  # quick notches
-    smoothSideways = ConfigItem("SmoothScroll", "Sideways", True, BoolValidator())  # Back/Forward + wheel too
     smoothMomentum = RangeConfigItem("SmoothScroll", "InertiaMultiplier", 10, RangeValidator(5, 30))  # tenths
     smoothBrake = ConfigItem("SmoothScroll", "ReverseStopsGlide", True, BoolValidator())
     smoothCarry = ConfigItem("SmoothScroll", "CarryToOtherApps", False, BoolValidator())
@@ -115,7 +114,7 @@ class Config(QConfig):
         """Every setting the mouse hook depends on."""
         return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
                 cls.disableInFullscreen, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.smoothCarry,
-                cls.smoothFlick, cls.smoothSideways, cls.bypassKey, cls.smoothExcluded, cls.smoothBounce]
+                cls.smoothFlick, cls.bypassKey, cls.smoothExcluded, cls.smoothBounce]
 
 
 cfg = Config()
@@ -131,7 +130,6 @@ def any_feature_on() -> bool:
 
 def hook_settings() -> HookSettings:
     horizontal = cfg.horizontalEnabled.value
-    smooth = smooth_settings()
     return HookSettings(
         horizontal=Settings(
             buttons=TRIGGERS[cfg.trigger.value] if horizontal else frozenset(),  # no trigger: feature off
@@ -141,8 +139,7 @@ def hook_settings() -> HookSettings:
             speed=cfg.horizontalSpeed.value / 10,
         ),
         cursor=cfg.cursorEnabled.value,
-        smooth=smooth,
-        smooth_sideways=smooth is not None and cfg.smoothSideways.value,
+        smooth=smooth_settings(),
         bypass=frozenset() if cfg.bypassKey.value == "none" else frozenset(cfg.bypassKey.value.split("+")),
         excluded=frozenset(cfg.smoothExcluded.value),
         skip_fullscreen=cfg.disableInFullscreen.value,

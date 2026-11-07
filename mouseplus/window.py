@@ -222,11 +222,8 @@ class SmoothPage(Page):
             FIF.SHARE, "Carry the glide to other apps",
             "A glide keeps going when the cursor moves to another window",
             cfg.smoothCarry, self.inertia)
-        self.sidewaysCard = SwitchSettingCard(
-            icons.glyph_icon(), "Sideways too", "Back/Forward + wheel keeps going after a flick too",
-            cfg.smoothSideways, self.inertia)
         self.inertia.addSettingCards([self.enableCard, self.flickCard, self.momentumCard, self.glideCard,
-                                      self.brakeCard, self.carryCard, self.sidewaysCard])
+                                      self.brakeCard, self.carryCard])
 
         self.bypass = Group("Bypass", self.view)
         self.bypassCard = ComboBoxSettingCard(
