@@ -92,6 +92,29 @@ def edge_groups(monitors: Sequence[Rect], source: int, edge: str):
         src, dst = new_src, new_dst
 
 
+@dataclass(frozen=True, order=True)
+class Link:
+    """A boundary where monitors meet: span `a` on the left (or top) side maps proportionally onto
+    span `b` on the right (or bottom) side. Spans run along the boundary."""
+    vertical: bool  # True: side by side, the boundary is the line x = `line`; False: stacked, y = `line`
+    line: int
+    a: Tuple[int, int]
+    b: Tuple[int, int]
+
+
+def links(monitors: Sequence[Rect]) -> list:
+    """Every boundary the cursor crosses proportionally (for drawing the layout)."""
+    found = set()
+    for i in range(len(monitors)):
+        for edge in ("right", "bottom"):
+            src, dst = edge_groups(monitors, i, edge)
+            if dst:
+                span, line, _ = _EDGES[edge]
+                found.add(Link(edge == "right", min(line(monitors[j]) for j in src),
+                               _union(span(monitors[j]) for j in src), _union(span(monitors[j]) for j in dst)))
+    return sorted(found)
+
+
 def map_crossing(monitors: Sequence[Rect], source: int, x: int, y: int) -> Optional[Tuple[int, int, int]]:
     """Where the cursor should land when a move to (x, y) leaves monitor `source`.
 

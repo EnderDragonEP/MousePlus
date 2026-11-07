@@ -22,6 +22,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 - 🖥️ **Proportional crossing** – Leaving a monitor halfway down lands the cursor halfway down the next one, instead of at the same pixel row.
 - 🚧 **No dead zones** – The cursor crosses anywhere along a shared edge, even where monitors only partly overlap.
 - 🧭 **Any layout** – Side by side or stacked, mixed sizes and scaling, and monitors added or rearranged while it runs. It also works while dragging windows or files.
+- 🗺️ **See it in action** – The Cursor tab draws your monitors to scale and shades the edges that connect. A dot follows your cursor, so you can watch where it lands.
 
 ### Smooth Scroll
 
@@ -95,6 +96,7 @@ mouseplus/config.py      settings (qfluentwidgets QConfig) and the Run-key autos
 mouseplus/migrate.py     one-time move of settings and autostart from Horizontal Scroll
 mouseplus/accent.py      Windows accent shades + watcher for accent changes
 mouseplus/window.py      Fluent settings window, one tab per feature
+mouseplus/monitormap.py  monitor layout drawing on the Cursor tab, with a live cursor dot
 mouseplus/tray.py        tray icon and menu
 mouseplus/osd.py         toggle-mode on/off pill
 mouseplus/icons.py       icons drawn in code + .ico writer for the build

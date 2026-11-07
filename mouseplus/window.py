@@ -9,6 +9,7 @@ from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, Fluent
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
 from .config import BYPASS_TEXTS, DURATION_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
+from .monitormap import MonitorMap
 from .updates import UpdateChecker, is_newer
 
 LICENSES_URL = f"{REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md"
@@ -159,14 +160,18 @@ class CursorPage(Page):
             cfg.cursorEnabled, self.view)
 
         self.monitors = Group("Monitors", self.view)
+        self.mapCard = MonitorMap(self.monitors)
         self.layoutCard = SettingCard(FIF.TILES, "Detected monitors", "…", self.monitors)
-        self.monitors.addSettingCard(self.layoutCard)
+        self.monitors.addSettingCards([self.mapCard, self.layoutCard])
 
         self.addWidgets(self.enableCard, self.monitors)
         self.setHint("When the cursor moves to another monitor, it lands at the same relative spot along the "
                      "shared edge, even where the monitors don't line up. It works while dragging, too.")
+        cfg.cursorEnabled.valueChanged.connect(self.mapCard.setActive)
+        self.mapCard.setActive(cfg.cursorEnabled.value)
 
     def setMonitors(self, monitors):
+        self.mapCard.setMonitors(monitors)
         monitors = sorted(monitors, key=lambda m: (m.left, m.top))  # as arranged on the desk
         sizes = ", ".join(f"{m.width}×{m.height}" for m in monitors)
         if len(monitors) > 1:

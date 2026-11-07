@@ -1,6 +1,6 @@
 import unittest
 
-from mouseplus.cursor import Rect, map_crossing, monitor_at
+from mouseplus.cursor import Link, Rect, links, map_crossing, monitor_at
 
 # The development machine: a 2560x1600 laptop panel with a 2560x1440 monitor to its right, 155 px lower.
 LAPTOP = Rect(0, 0, 2560, 1600)
@@ -89,6 +89,29 @@ class OtherLayoutsTest(unittest.TestCase):
         lower = Rect(1000, 2100, 2000, 3000)
         x, y, target = map_crossing([tall, upper, lower], 0, 1000, 1200)  # 40% of the pair span
         self.assertEqual((target, y), (1, 999))  # 1200 falls in the gap; the upper one is nearer
+
+
+class LinksTest(unittest.TestCase):
+    """The boundaries drawn on the Cursor tab, with the spans that map onto each other."""
+
+    def test_side_by_side(self):
+        self.assertEqual(links([LAPTOP, SIDE]), [Link(True, 2560, (0, 1600), (155, 1595))])
+        self.assertEqual(links([SIDE, LAPTOP]), links([LAPTOP, SIDE]))  # order doesn't matter
+
+    def test_stacked(self):
+        top, bottom = Rect(320, 0, 2240, 1080), Rect(0, 1080, 2560, 2520)
+        self.assertEqual(links([top, bottom]), [Link(False, 1080, (320, 2240), (0, 2560))])
+
+    def test_one_monitor_next_to_two(self):
+        tall, upper, lower = Rect(0, 0, 2560, 1440), Rect(2560, 0, 4480, 1080), Rect(2560, 1080, 4480, 2160)
+        self.assertEqual(links([tall, upper, lower]), [
+            Link(False, 1080, (2560, 4480), (2560, 4480)),  # between the pair
+            Link(True, 2560, (0, 1440), (0, 2160)),         # the tall one's whole edge onto the pair's
+        ])
+
+    def test_nothing_to_link(self):
+        self.assertEqual(links([LAPTOP]), [])
+        self.assertEqual(links([Rect(0, 0, 1920, 1080), Rect(1920, 1080, 3840, 2160)]), [])  # corners only
 
 
 if __name__ == "__main__":
