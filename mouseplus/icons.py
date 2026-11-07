@@ -151,6 +151,11 @@ def app_icon() -> QIcon:
     return _icon(_paint_app)
 
 
+def app_image(size: int) -> QImage:
+    """The app icon as a `size` px image (for the .ico and the README banner)."""
+    return _image(size, _paint_app)
+
+
 class _Themed(QIconEngine):
     """Paints a glyph in the current Fluent theme's text color (or accent), like FluentIcon does."""
 
@@ -210,7 +215,7 @@ def tray_icon(state: str) -> QIcon:
 
 def write_ico(path):
     """Write a multi-size .ico (PNG-compressed entries, Windows Vista+)."""
-    images = [_image(size, _paint_app) for size in _ICO_SIZES]
+    images = [app_image(size) for size in _ICO_SIZES]
     blobs = []
     for img in images:
         buf = QBuffer()

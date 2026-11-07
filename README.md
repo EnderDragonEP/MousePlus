@@ -98,6 +98,7 @@ mouseplus/window.py      Fluent settings window, one tab per feature
 mouseplus/tray.py        tray icon and menu
 mouseplus/osd.py         toggle-mode on/off pill
 mouseplus/icons.py       icons drawn in code + .ico writer for the build
+tools/banner.py          draws the README banner (.asset/banner.png) from the app icon
 ```
 
 ## Disclaimer
