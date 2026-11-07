@@ -224,7 +224,7 @@ class SmoothPage(Page):
             "Hold it for normal notched scrolling. Ctrl + wheel (zoom) always passes through.",
             texts=list(BYPASS_TEXTS.values()), parent=self.bypass)
         self.appsCard = AppListCard(
-            cfg.smoothExcluded, FIF.APPLICATION, "Apps that scroll normally",
+            cfg.smoothExcluded, cfg.smoothAppNames, FIF.APPLICATION, "Apps that scroll normally",
             "For apps that react to every wheel step, like image viewers", self.bypass)
         self.bypass.addSettingCards([self.bypassCard, self.appsCard])
 

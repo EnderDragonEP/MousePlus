@@ -41,8 +41,8 @@ IMAGE_VIEWERS = {
 
 
 def program_label(program: str) -> str:
-    """How the app list shows a program: "XnView MP (xnviewmp.exe)", or just the file for unknown ones."""
-    name = IMAGE_VIEWERS.get(program)
+    """How the app list shows a program: "XnView MP (xnviewmp.exe)", or just the file when its name is unknown."""
+    name = IMAGE_VIEWERS.get(program) or cfg.smoothAppNames.value.get(program)
     return f"{name} ({program})" if name else program
 
 
@@ -62,6 +62,19 @@ class ProgramListValidator(ConfigValidator):
 
     def correct(self, value):
         return program_names(value)
+
+
+class ProgramNamesValidator(ConfigValidator):
+    """Program file -> name: lowercase files, trimmed names, no blanks."""
+
+    def validate(self, value):
+        return value == self.correct(value)
+
+    def correct(self, value):
+        if not isinstance(value, dict):
+            return {}
+        return {program.strip().lower(): name.strip() for program, name in value.items()
+                if isinstance(program, str) and isinstance(name, str) and program.strip() and name.strip()}
 
 
 class Config(QConfig):
@@ -92,6 +105,7 @@ class Config(QConfig):
     smoothCarry = ConfigItem("SmoothScroll", "CarryToOtherApps", False, BoolValidator())
     bypassKey = OptionsConfigItem("SmoothScroll", "BypassKey", "alt", OptionsValidator(list(BYPASS_TEXTS)))
     smoothExcluded = ConfigItem("SmoothScroll", "ExcludedApps", list(IMAGE_VIEWERS), ProgramListValidator())
+    smoothAppNames = ConfigItem("SmoothScroll", "AppNames", {}, ProgramNamesValidator())  # apps added by hand
     smoothBounce = ConfigItem("SmoothScroll", "Bounce", False, BoolValidator())  # experimental
 
     @classmethod

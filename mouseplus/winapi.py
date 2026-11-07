@@ -10,6 +10,7 @@ kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 shell32 = ctypes.WinDLL("shell32", use_last_error=True)
 advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
 dwmapi = ctypes.WinDLL("dwmapi")
+version = ctypes.WinDLL("version")
 
 LRESULT = wintypes.LPARAM
 ULONG_PTR = ctypes.c_size_t
@@ -208,6 +209,11 @@ FindWindowExW = _fn(user32, "FindWindowExW", wintypes.HWND,
                     wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
 DwmGetWindowAttribute = _fn(dwmapi, "DwmGetWindowAttribute", ctypes.c_long,
                             wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD)
+GetFileVersionInfoSizeW = _fn(version, "GetFileVersionInfoSizeW", wintypes.DWORD, wintypes.LPCWSTR, ctypes.c_void_p)
+GetFileVersionInfoW = _fn(version, "GetFileVersionInfoW", wintypes.BOOL,
+                          wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p)
+VerQueryValueW = _fn(version, "VerQueryValueW", wintypes.BOOL, ctypes.c_void_p, wintypes.LPCWSTR,
+                     ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.UINT))
 
 
 def _mouse_input(flags: int, data: int = 0) -> INPUT:
@@ -282,6 +288,29 @@ def program_path(hwnd) -> str:
 def program_name(hwnd) -> str:
     """Lowercase file name of the program that owns a window, e.g. 'xnviewmp.exe'; '' if unknown."""
     return os.path.basename(program_path(hwnd)).lower()
+
+
+def program_description(path: str) -> str:
+    """A program's own name from its version info, as Task Manager shows it, e.g. 'Visual Studio Code';
+    '' if it has none."""
+    size = GetFileVersionInfoSizeW(path, None)
+    data = ctypes.create_string_buffer(size) if size else None
+    if data is None or not GetFileVersionInfoW(path, 0, size, data):
+        return ""
+    value, length = ctypes.c_void_p(), wintypes.UINT()
+    languages = [(0x0409, 0x04B0), (0x0409, 0x04E4)]  # US English, Unicode or Western code page
+    if VerQueryValueW(data, "\\VarFileInfo\\Translation", ctypes.byref(value), ctypes.byref(length)) \
+            and length.value >= 4:
+        words = ctypes.cast(value, ctypes.POINTER(wintypes.WORD * (length.value // 2))).contents
+        languages[:0] = zip(words[::2], words[1::2])  # the file's own languages first
+    for key in ("FileDescription", "ProductName"):
+        for language, codepage in languages:
+            entry = f"\\StringFileInfo\\{language:04x}{codepage:04x}\\{key}"
+            if VerQueryValueW(data, entry, ctypes.byref(value), ctypes.byref(length)) and value.value:
+                text = ctypes.wstring_at(value.value).strip()
+                if text:
+                    return text
+    return ""
 
 
 def open_apps() -> list:

@@ -34,13 +34,18 @@ class AppItem(QWidget):
         self.setFixedHeight(53)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
 
+    def refresh(self):
+        self.label.setText(program_label(self.program))
+
 
 class AppListCard(ExpandSettingCard):
-    """Expandable card listing the programs in a list config item, with an "Add app" button."""
+    """Expandable card listing the programs in a list config item, with an "Add app" button.
+    `namesItem` keeps the names of the apps added here (program file -> name)."""
 
-    def __init__(self, configItem, icon, title: str, content: str, parent=None):
+    def __init__(self, configItem, namesItem, icon, title: str, content: str, parent=None):
         super().__init__(icon, title, content, parent)
         self.configItem = configItem
+        self.namesItem = namesItem
         self.items = {}
         self.addButton = PushButton("Add app", self, FIF.ADD)
         self.addButton.clicked.connect(self._pick)
@@ -51,12 +56,39 @@ class AppListCard(ExpandSettingCard):
         for program in configItem.value:
             self._addItem(program)
 
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._nameOpenApps()
+
     def _pick(self):
         picker = AppPicker(set(self.configItem.value), self.window())
         if picker.exec() and picker.program and picker.program not in self.configItem.value:
+            self._setName(picker.program, picker.name)
             qconfig.set(self.configItem, [*self.configItem.value, picker.program])
             self._addItem(picker.program)
             self.setExpand(True)
+
+    def _setName(self, program: str, name: str):
+        names = dict(self.namesItem.value)
+        if name:
+            names[program] = name
+        else:
+            names.pop(program, None)
+        if names != self.namesItem.value:
+            qconfig.set(self.namesItem, names)
+
+    def _nameOpenApps(self):
+        """Name the listed apps whose name isn't known yet (added before names were kept) if they're open now."""
+        unnamed = {program for program in self.configItem.value if program_label(program) == program}
+        if not unnamed:
+            return
+        for path, _ in winapi.open_apps():
+            program = os.path.basename(path).lower()
+            name = winapi.program_description(path) if program in unnamed else ""
+            if name:
+                self._setName(program, name)
+                self.items[program].refresh()
+                unnamed.discard(program)
 
     def _addItem(self, program: str):
         item = AppItem(program, self.view)
@@ -68,6 +100,7 @@ class AppListCard(ExpandSettingCard):
 
     def _remove(self, program: str):
         qconfig.set(self.configItem, [p for p in self.configItem.value if p != program])
+        self._setName(program, "")
         item = self.items.pop(program)
         self.viewLayout.removeWidget(item)
         item.deleteLater()
@@ -75,11 +108,11 @@ class AppListCard(ExpandSettingCard):
 
 
 class AppPicker(MessageBoxBase):
-    """Pick one of the open apps, or browse for a program file. `program` holds the choice."""
+    """Pick one of the open apps, or browse for a program file. `program` and `name` hold the choice."""
 
     def __init__(self, listed: set, parent=None):
         super().__init__(parent)
-        self.program = ""
+        self.program, self.name = "", ""
         self.titleLabel = SubtitleLabel("Add an app", self)
         self.hintLabel = BodyLabel("Pick an open app. In it, the wheel will scroll normally, one notch at a time.",
                                    self)
@@ -92,10 +125,12 @@ class AppPicker(MessageBoxBase):
             program = os.path.basename(path).lower()
             if program in listed:
                 continue
-            title = title if len(title) <= _TITLE_CHARS else title[:_TITLE_CHARS - 1].rstrip() + "…"
-            item = QListWidgetItem(icons.icon(QFileInfo(path)), f"{title}  ({program})")
-            item.setData(Qt.ItemDataRole.UserRole, program)
-            item.setToolTip(path)
+            name = winapi.program_description(path)
+            # Without a name of its own, show the window title (but don't keep it: it often names a document).
+            shown = name or (title if len(title) <= _TITLE_CHARS else title[:_TITLE_CHARS - 1].rstrip() + "…")
+            item = QListWidgetItem(icons.icon(QFileInfo(path)), f"{shown} ({program})")
+            item.setData(Qt.ItemDataRole.UserRole, (program, name))
+            item.setToolTip(f"{title}\n{path}")
             self.list.addItem(item)
         self.browseButton = TransparentPushButton("Browse for a program…", self, FIF.FOLDER)
 
@@ -113,12 +148,12 @@ class AppPicker(MessageBoxBase):
 
     def validate(self) -> bool:
         items = self.list.selectedItems()
-        self.program = items[0].data(Qt.ItemDataRole.UserRole) if items else ""
+        self.program, self.name = items[0].data(Qt.ItemDataRole.UserRole) if items else ("", "")
         return bool(self.program)
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(self, "Choose a program", os.environ.get("ProgramFiles", ""),
                                               "Programs (*.exe)")
         if path:
-            self.program = os.path.basename(path).lower()
+            self.program, self.name = os.path.basename(path).lower(), winapi.program_description(path)
             self.accept()
