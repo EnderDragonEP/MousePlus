@@ -211,7 +211,12 @@ class SmoothPage(Page):
             FIF.PAUSE, "Reverse wheel stops the glide",
             "Turning the wheel back during a glide just stops it, without scrolling back",
             cfg.smoothBrake, self.inertia)
-        self.inertia.addSettingCards([self.inertiaCard, self.momentumCard, self.glideCard, self.brakeCard])
+        self.carryCard = SwitchSettingCard(
+            FIF.SHARE, "Carry the glide to other apps",
+            "A glide keeps going when the cursor moves to another window",
+            cfg.smoothCarry, self.inertia)
+        self.inertia.addSettingCards([self.inertiaCard, self.momentumCard, self.glideCard, self.brakeCard,
+                                      self.carryCard])
 
         self.bypass = Group("Bypass", self.view)
         self.bypassCard = ComboBoxSettingCard(
@@ -241,7 +246,7 @@ class SmoothPage(Page):
         animate = cfg.smoothAnimation.value
         self.durationCard.setEnabled(animate)
         self.inertiaCard.setEnabled(animate)  # inertia continues the animation
-        for card in (self.momentumCard, self.glideCard, self.brakeCard):
+        for card in (self.momentumCard, self.glideCard, self.brakeCard, self.carryCard):
             card.setEnabled(animate and cfg.smoothInertia.value)
 
 

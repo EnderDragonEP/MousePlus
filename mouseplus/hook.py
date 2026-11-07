@@ -181,8 +181,9 @@ class MouseHook(QObject):
             w.send_mask_key()
         elif kind == "smooth":
             _, delta, now, root, modifiers = action
-            if self._scroller.active and self._gesture != (root, modifiers):
-                self._scroller.stop()  # another window or other keys: a new motion
+            gesture, carry = self._gesture, self._scroller.settings.carry
+            if self._scroller.active and gesture != (root, modifiers) and not (carry and gesture[1] == modifiers):
+                self._scroller.stop()  # other keys, or another window the glide may not carry into: a new motion
             self._gesture = (root, modifiers)
             self._scroller.add(delta, now)
             if self._scroller.settings.bounce:
@@ -194,11 +195,14 @@ class MouseHook(QObject):
 
     def _frame(self):
         root, modifiers = self._gesture
-        # Injected wheel events go to the window under the cursor and carry the keys
-        # held now: stop rather than scroll another window, or zoom once Ctrl is down.
-        if w.held_modifiers() != modifiers or w.root_window_at(*w.cursor_pos()) != root:
+        x, y = w.cursor_pos()
+        here = w.root_window_at(x, y)
+        # Injected wheel events go to the window under the cursor and carry the keys held now:
+        # stop rather than zoom once Ctrl is down, or scroll another window the glide may not carry into.
+        if w.held_modifiers() != modifiers or (here != root and not self._carry_to(here, x, y)):
             self._scroller.stop()
             return
+        self._gesture = (here, modifiers)
         step = self._scroller.frame(time.perf_counter())
         if step:
             w.send_wheel(step)
@@ -207,6 +211,16 @@ class MouseHook(QObject):
         if (scroller.settings.bounce and scroller.active and self._frames % _EDGE_EVERY == 0
                 and (scroller.gliding or abs(scroller.remaining) >= _EDGE_MIN)):
             self._check_edge()
+
+    def _carry_to(self, root, x: int, y: int) -> bool:
+        """With "carry the glide to other apps" on, may the glide go on in the window the cursor just
+        moved to? Not into apps on the list, the taskbar, full-screen apps or admin windows."""
+        settings = self._settings
+        return bool(root) and self._scroller.settings.carry and not (
+            w.window_class(root) in w.TASKBAR_CLASSES
+            or w.program_name(w.window_at(x, y)) in settings.excluded
+            or (settings.skip_fullscreen and w.is_fullscreen(root))
+            or w.window_is_elevated(root))
 
     def _check_edge(self):
         """Overscroll bounce: if the page under the cursor can't scroll further in the

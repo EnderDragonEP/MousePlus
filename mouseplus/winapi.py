@@ -425,7 +425,14 @@ def move_window(hwnd, x: int, y: int):
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS)
 
 
-_SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
+TASKBAR_CLASSES = {"Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
+_SHELL_CLASSES = {"Progman", "WorkerW", *TASKBAR_CLASSES}
+
+
+def window_class(hwnd) -> str:
+    name = ctypes.create_unicode_buffer(256)
+    GetClassNameW(hwnd, name, len(name))
+    return name.value
 
 
 def foreground_is_fullscreen() -> bool:

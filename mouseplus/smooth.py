@@ -37,6 +37,7 @@ class SmoothSettings:
     glide: float = GLIDES["medium"]
     momentum: float = 1.0     # inertia multiplier: how fast (and so how far) a flick glides
     brake: bool = True        # turning the wheel back during a glide only stops it
+    carry: bool = False       # a glide goes on in the next window the cursor moves to (played by the hook)
     bounce: bool = False      # experimental overscroll bounce (played by the hook, not here)
 
 
