@@ -4,7 +4,7 @@ from pathlib import Path
 
 APP_NAME = "Mouse Plus"
 APP_ID = "MousePlus"
-__version__ = "1.0.2"
+__version__ = "2.0.0"
 __author__ = "Ender Yang"
 REPO_URL = "https://github.com/EnderDragonEP/MousePlus"  # "View source" and the update check
 

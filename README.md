@@ -2,28 +2,50 @@
 
 ![Banner](.asset/banner.png)
 
-A small Windows tray app that adds to your mouse: hold **Mouse Back** or **Mouse Forward** and roll the wheel to scroll sideways.
-Formerly called Horizontal Scroll; settings and autostart move over automatically.
+A small Windows tray app that gets more out of your mouse: scroll sideways with Back/Forward + wheel, move the cursor between monitors of different sizes without getting stuck, and scroll as smoothly as a touchpad.
+Formerly called **Horizontal Scroll**: on first launch your settings and "Start with Windows" move over automatically.
 The settings window follows the Fluent Design System: Mica background, light/dark mode and your accent color.
 
 ## Features
 
+Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll start off; turn them on in their tabs.
+
+### Horizontal Scroll
+
 - 🖱️ **Hold to scroll sideways** – Hold Mouse Back or Forward and roll the wheel.
 - 👆 **Clicks still work** – A quick click without scrolling still goes back or forward as usual.
 - 🔒 **Toggle mode** – Click once to lock horizontal scrolling on, click again to turn it off.
-- 🎮 **Game friendly** – Turn off automatically in full-screen games, videos and F11 browsers.
 - 🎛️ **Make it yours** – Pick the trigger button, scroll speed (0.5×–3.0×) and scroll direction.
+
+### Monitor Cursor
+
+- 🖥️ **Proportional crossing** – Leaving a monitor halfway down lands the cursor halfway down the next one, instead of at the same pixel row.
+- 🚧 **No dead zones** – The cursor crosses anywhere along a shared edge, even where monitors only partly overlap.
+- 🧭 **Any layout** – Side by side or stacked, mixed sizes and scaling, and monitors added or rearranged while it runs. It also works while dragging windows or files.
+
+### Smooth Scroll
+
+- 🧈 **Smooth steps** – Each wheel notch scrolls in small steps instead of one jump. Pick the animation time and scroll distance.
+- 🛝 **Inertia** – A fast flick keeps scrolling and slows down gradually. Turning the wheel back, clicking, Back/Forward or the bypass key stop it at once.
+- ⌨️ **Bypass key** – Hold Alt (or the key you pick) for normal notched scrolling and your apps' own Alt + wheel shortcuts. Ctrl + wheel (zoom) always passes through untouched.
+- 🧪 **Overscroll bounce** – Experimental and off by default: the window springs back a little at the end of a page (see the limitations).
+
+### Everywhere
+
+- 🎮 **Game friendly** – Every feature steps aside in full-screen games, videos and F11 browsers.
+- ⏸️ **One pause** – Right-click the tray icon to pause every feature at once.
 - 🚀 **Start with Windows** – An optional toggle, so it's always ready.
-- 📌 **Lives in the tray** – Closing the window keeps it running. Right-click the tray icon to pause it or exit.
-- 🎨 **Feels like Native App** – Fluent Design with Mica, light/dark mode and your accent color, updated live.
-- 🔔 **Update check** – See if a new version is out, right from the About section.
+- 📌 **Lives in the tray** – Closing the window keeps it running.
+- 🎨 **Feels like a native app** – Fluent Design with Mica, light/dark mode and your accent color, updated live.
+- 🔔 **Update check** – See if a new version is out, right from the General tab.
 
 ## Limitations
 
-- It doesn't work over windows of apps running as administrator unless Mouse Plus also runs as administrator. Windows blocks this.
-- Apps without horizontal-scroll support won't scroll sideways.
-- If mouse software (for example Logitech Options+) remaps Back/Forward to keystrokes, the app never sees the buttons.
-- In hold mode, Back/Forward fires on button release, a moment later than usual.
+- **Admin windows:** the features don't act over windows of apps running as administrator unless Mouse Plus also runs as administrator. Windows blocks this; the wheel simply scrolls normally there.
+- **Horizontal Scroll:** apps without horizontal-scroll support won't scroll sideways. If mouse software (for example Logitech Options+) remaps Back/Forward to keystrokes, the app never sees the buttons. In hold mode, Back/Forward fires on button release, a moment later than usual.
+- **Monitor Cursor:** while it's on, Mouse Plus decides every crossing itself, so Windows 11's "Ease cursor movement between displays" no longer applies at shared edges.
+- **Smooth Scroll:** the few apps that ignore wheel steps smaller than a notch (some older apps and games) won't scroll smoothly. Inertia stops when the cursor moves to another window, because Windows sends the wheel to the window under the cursor.
+- **Overscroll bounce:** Windows can't tell other programs when an app hits the end of a page, so the bounce only works in apps with classic Windows scrollbars (like Notepad++), and never moves maximized windows. A snapped window may lose its snap layout after a bounce.
 - Single-file PyInstaller exes are sometimes flagged by antivirus heuristics. If that happens, build a one-folder version instead by moving `a.binaries`/`a.datas` into a `COLLECT` step in the spec.
 
 ## Run
@@ -40,6 +62,9 @@ The settings window follows the Fluent Design System: Mica background, light/dar
   After that, you can also just double-click `run.pyw` to test your changes without building the exe.
 
 Settings are saved to `%APPDATA%\MousePlus\config.json`, and errors are logged to `error.log` in the same folder.
+The old `%APPDATA%\HorizontalScroll` folder is left untouched after the move; you can delete it.
+
+To try a build without touching your real settings or autostart entry, start it with `APPDATA` pointing at a scratch folder and `MOUSEPLUS_RUN_KEY` at a scratch registry key (for example `Software\MousePlusTest\Run`).
 
 ## Build the exe
 
@@ -58,17 +83,21 @@ The script creates `.venv`, installs the requirements plus PyInstaller, and writ
 ## Layout
 
 ```text
-main.py                entry point: single instance, wires config, hook and UI
-mouseplus/horizontal.py  horizontal scroll and toggle decisions (pure, unit-tested)
-mouseplus/hook.py      low-level mouse hook thread + SendInput injector thread
-mouseplus/winapi.py    ctypes bindings, input injection, full-screen detection
-mouseplus/config.py    settings (qfluentwidgets QConfig) and the Run-key autostart
-mouseplus/migrate.py   one-time move of settings and autostart from Horizontal Scroll
-mouseplus/accent.py    Windows accent shades + watcher for accent changes
-mouseplus/window.py    Fluent settings window, one tab per feature
-mouseplus/tray.py      tray icon and menu
-mouseplus/osd.py       toggle-mode on/off pill
-mouseplus/icons.py     icons drawn in code + .ico writer for the build
+main.py                  entry point: single instance, migration, wires config, hook and UI
+mouseplus/hook.py        the one low-level mouse hook (all features) + output thread (SendInput, animation)
+mouseplus/router.py      which feature handles a wheel event (pure, unit-tested)
+mouseplus/horizontal.py  Horizontal Scroll: trigger, click replay and toggle decisions (pure, unit-tested)
+mouseplus/cursor.py      Monitor Cursor: proportional mapping between monitors (pure, unit-tested)
+mouseplus/smooth.py      Smooth Scroll: easing and inertia (pure, unit-tested)
+mouseplus/bounce.py      experimental overscroll bounce: edge test and spring (pure, unit-tested)
+mouseplus/winapi.py      ctypes bindings: input injection, monitors, windows, timers, full-screen check
+mouseplus/config.py      settings (qfluentwidgets QConfig) and the Run-key autostart
+mouseplus/migrate.py     one-time move of settings and autostart from Horizontal Scroll
+mouseplus/accent.py      Windows accent shades + watcher for accent changes
+mouseplus/window.py      Fluent settings window, one tab per feature
+mouseplus/tray.py        tray icon and menu
+mouseplus/osd.py         toggle-mode on/off pill
+mouseplus/icons.py       icons drawn in code + .ico writer for the build
 ```
 
 ## Disclaimer
