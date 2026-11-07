@@ -25,4 +25,6 @@ htmlcov/
 # Windows
 Thumbs.db
 desktop.ini
+
+# Other
 idea.md
