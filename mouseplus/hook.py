@@ -6,26 +6,33 @@ import threading
 import time
 from ctypes import wintypes
 from dataclasses import dataclass, field
+from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from . import winapi as w
 from .cursor import Rect, map_crossing, monitor_at
 from .horizontal import Engine, Settings
+from .router import HORIZONTAL, SMOOTH, WheelEvent, route_wheel
+from .smooth import FRAME, SmoothScroller, SmoothSettings
 
 log = logging.getLogger("mouseplus")
 
 _WM_APPLY = w.WM_APP + 1   # thread message: pick up new settings or monitors
 _WATCHDOG_MS = 30_000      # periodic hook re-install
 _FULLSCREEN_TTL = 0.25     # seconds to cache the full-screen check
+_MASK_INTERVAL = 0.5       # seconds between mask-key taps while a bypass key is held
 _NOWHERE = Rect(0, 0, 0, 0)
+_BUTTON_DOWNS = {0x0201, 0x0204, 0x0207}  # left, right, middle: a click stops inertia
 
 
 @dataclass(frozen=True)
 class HookSettings:
     horizontal: Settings = field(default_factory=Settings)
-    cursor: bool = False           # Monitor Cursor: proportional moves between monitors
-    skip_fullscreen: bool = True   # every feature stays out of full-screen apps
+    cursor: bool = False                     # Monitor Cursor: proportional moves between monitors
+    smooth: Optional[SmoothSettings] = None  # Smooth Scroll; None when off
+    bypass: frozenset = frozenset({"alt"})   # keys that make the wheel pass through untouched
+    skip_fullscreen: bool = True             # every feature stays out of full-screen apps
 
 
 class MouseHook(QObject):
@@ -33,10 +40,11 @@ class MouseHook(QObject):
 
     Two threads:
     - the hook thread runs a plain Win32 message loop and answers hook calls;
-      the features' state is only touched there, settings changes are posted to it.
-    - the injector thread calls SendInput. SendInput waits until every
-      low-level hook (ours included) has seen the injected event, so calling
-      it on the hook thread would stall input until Windows times us out.
+      the features' decision state is only touched there, settings are posted to it.
+    - the output thread calls SendInput and plays out smooth scrolling. SendInput
+      waits until every low-level hook (ours included) has seen the injected event,
+      so calling it on the hook thread would stall input until Windows times us out.
+      It sleeps on an event when idle and wakes on a high-resolution timer while animating.
     """
 
     latchedChanged = pyqtSignal(bool)
@@ -49,9 +57,10 @@ class MouseHook(QObject):
         self._engine = Engine(self._cached_fullscreen, self.latchedChanged.emit)
         self._proc = w.HOOKPROC(self._callback)  # must stay referenced while hooked
         self._actions = queue.SimpleQueue()
+        self._wake = w.CreateEventW(None, False, False, None)  # tells the output thread to look at the queue
         self._hhook = None
         self._thread = None
-        self._injector = None
+        self._output = None
         self._tid = 0
         self._error = 0
         self._fs_value = False
@@ -63,6 +72,12 @@ class MouseHook(QObject):
         self._cursor_active = False   # feature on and more than one monitor
         self._pos = wintypes.POINT()  # reused for GetCursorPos on every move
         self._pos_ref = ctypes.byref(self._pos)
+        # Smooth Scroll state
+        self._smoothing = False       # set by the output thread while it animates
+        self._elevation = {}          # root window -> elevated, hook thread only
+        self._mask_time = 0.0
+        self._scroller = SmoothScroller()  # output thread only
+        self._gesture = None          # (root window, modifiers) the animation started with
 
     @property
     def running(self) -> bool:
@@ -73,8 +88,8 @@ class MouseHook(QObject):
             self.update(settings)
             return True
         self._settings = settings
-        self._injector = threading.Thread(target=self._inject_loop, name="MouseInjector", daemon=True)
-        self._injector.start()
+        self._output = threading.Thread(target=self._output_loop, name="MouseOutput", daemon=True)
+        self._output.start()
         ready = threading.Event()
         self._thread = threading.Thread(target=self._run, args=(ready,), name="MouseHook", daemon=True)
         self._thread.start()
@@ -98,27 +113,81 @@ class MouseHook(QObject):
             w.PostThreadMessageW(self._tid, w.WM_QUIT, 0, 0)
             self._thread.join(2)
         self._thread = None
-        if self._injector is not None:
-            self._actions.put(None)
-            self._injector.join(2)
-            self._injector = None
+        if self._output is not None:
+            self._send(None)
+            self._output.join(2)
+            self._output = None
 
     def _post_apply(self):
         if self.running:
             w.PostThreadMessageW(self._tid, _WM_APPLY, 0, 0)
 
-    # -- injector thread -------------------------------------------------
+    def _send(self, action):
+        """Hand an action to the output thread."""
+        self._actions.put(action)
+        w.SetEvent(self._wake)
 
-    def _inject_loop(self):
-        while (action := self._actions.get()) is not None:
-            kind, value = action
-            try:
-                if kind == "hwheel":
-                    w.send_hwheel(value)
-                else:
-                    w.send_xclick(value)
-            except Exception:
-                log.exception("SendInput failed")
+    # -- output thread ---------------------------------------------------
+
+    def _output_loop(self):
+        timer = w.CreateWaitableTimerExW(None, None, w.CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, w.TIMER_ALL_ACCESS)
+        handles = (wintypes.HANDLE * 2)(self._wake, timer)
+        due = ctypes.c_longlong(-round(FRAME * 10_000_000))  # relative, in 100 ns units
+        scroller = self._scroller
+        scroller.stop()
+        try:
+            while True:
+                w.WaitForMultipleObjects(2, handles, False, w.INFINITE)
+                while True:
+                    try:
+                        action = self._actions.get_nowait()
+                    except queue.Empty:
+                        break
+                    if action is None:
+                        return
+                    try:
+                        self._perform(action)
+                    except Exception:
+                        log.exception("Output action failed")
+                if scroller.active:
+                    self._frame()
+                self._smoothing = scroller.active
+                if scroller.active:
+                    w.SetWaitableTimer(timer, ctypes.byref(due), 0, None, None, False)
+        finally:
+            scroller.stop()
+            self._smoothing = False
+            w.CloseHandle(timer)
+
+    def _perform(self, action):
+        kind = action[0]
+        if kind == "hwheel":
+            w.send_hwheel(action[1])
+        elif kind == "click":
+            w.send_xclick(action[1])
+        elif kind == "mask":
+            w.send_mask_key()
+        elif kind == "smooth":
+            _, delta, now, root, modifiers = action
+            if self._scroller.active and self._gesture != (root, modifiers):
+                self._scroller.stop()  # another window or other keys: a new motion
+            self._gesture = (root, modifiers)
+            self._scroller.add(delta, now)
+        elif kind == "stop":
+            self._scroller.stop()
+        elif kind == "settings":
+            self._scroller.settings = action[1]
+
+    def _frame(self):
+        root, modifiers = self._gesture
+        # Injected wheel events go to the window under the cursor and carry the keys
+        # held now: stop rather than scroll another window, or zoom once Ctrl is down.
+        if w.held_modifiers() != modifiers or w.root_window_at(*w.cursor_pos()) != root:
+            self._scroller.stop()
+            return
+        step = self._scroller.frame(time.perf_counter())
+        if step:
+            w.send_wheel(step)
 
     # -- hook thread -----------------------------------------------------
 
@@ -155,6 +224,7 @@ class MouseHook(QObject):
         self._monitors = self._pending_monitors
         self._cursor_active = settings.cursor and len(self._monitors) > 1
         self._current, self._current_index = _NOWHERE, None
+        self._send(("settings", settings.smooth) if settings.smooth else ("stop",))
 
     def _install(self):
         hook = w.SetWindowsHookExW(w.WH_MOUSE_LL, self._proc, w.GetModuleHandleW(None), 0)
@@ -219,18 +289,59 @@ class MouseHook(QObject):
         info = w.MSLLHOOKSTRUCT.from_address(lparam)
         if info.dwExtraInfo == w.MAGIC:  # injected by us
             return False
+        if wparam in _BUTTON_DOWNS:
+            if self._smoothing:
+                self._send(("stop",))
+            return False
         hi = info.mouseData >> 16
         if wparam == w.WM_MOUSEWHEEL:
-            swallow, action = self._engine.wheel(hi - 0x10000 if hi & 0x8000 else hi)
-        elif wparam == w.WM_XBUTTONDOWN:
+            return self._wheel(hi - 0x10000 if hi & 0x8000 else hi, info.pt.x, info.pt.y)
+        if wparam == w.WM_XBUTTONDOWN:
+            if self._smoothing:
+                self._send(("stop",))
             swallow, action = self._engine.x_down(hi)
         elif wparam == w.WM_XBUTTONUP:
             swallow, action = self._engine.x_up(hi)
         else:
             return False
         if action:
-            self._actions.put(action)
+            self._send(action)
         return swallow
+
+    def _wheel(self, delta: int, x: int, y: int) -> bool:
+        settings = self._settings
+        modifiers = w.held_modifiers()
+        root = None
+
+        def elevated():
+            nonlocal root
+            root = w.root_window_at(x, y)
+            if root not in self._elevation:
+                if len(self._elevation) > 64:
+                    self._elevation.clear()
+                self._elevation[root] = bool(root) and w.window_is_elevated(root)
+            return self._elevation[root]
+
+        decision = route_wheel(
+            WheelEvent(delta, self._engine.claims_wheel(), modifiers, settings.smooth is not None, settings.bypass),
+            fullscreen=lambda: settings.skip_fullscreen and self._cached_fullscreen(),
+            elevated=elevated)
+        if decision.stop and self._smoothing:
+            self._send(("stop",))
+        if decision.mask:
+            now = time.monotonic()
+            if now - self._mask_time > _MASK_INTERVAL:
+                self._mask_time = now
+                self._send(("mask",))
+        if decision.route == HORIZONTAL:
+            swallow, action = self._engine.wheel(delta)
+            if action:
+                self._send(action)
+            return swallow
+        if decision.route == SMOOTH:
+            self._send(("smooth", delta, time.perf_counter(), root, modifiers))
+            return True
+        return False
 
     def _cached_fullscreen(self) -> bool:
         now = time.monotonic()

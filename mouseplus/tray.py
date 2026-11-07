@@ -14,7 +14,8 @@ _SECONDARY = (QColor(96, 96, 96), QColor(206, 206, 206))  # light, dark
 def active_features() -> list:
     """Names of the features that are switched on."""
     features = [("Horizontal Scroll", cfg.horizontalEnabled.value),
-                ("Monitor Cursor", cfg.cursorEnabled.value)]
+                ("Monitor Cursor", cfg.cursorEnabled.value),
+                ("Smooth Scroll", cfg.smoothEnabled.value)]
     return [name for name, on in features if on]
 
 

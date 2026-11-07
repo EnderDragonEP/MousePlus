@@ -117,8 +117,7 @@ class App(QObject):
         self.hook.failed.connect(self._onHookFailed)
         self.themeListener.systemThemeChanged.connect(self._onAccentChanged)  # dark/light use different shades
         self.accentWatcher.changed.connect(self.accentTimer.start)
-        for item in (*cfg.featureItems(), cfg.trigger, cfg.toggleMode, cfg.disableInFullscreen,
-                     cfg.horizontalReverse, cfg.horizontalSpeed):
+        for item in cfg.hookItems():
             item.valueChanged.connect(self._apply)
         qapp.screenAdded.connect(self._watchScreen)
         qapp.screenRemoved.connect(lambda *_: self.screensTimer.start())

@@ -11,6 +11,7 @@ from qfluentwidgets import (BoolValidator, ConfigItem, OptionsConfigItem, Option
 from . import APP_ID, CONFIG_FILE
 from .hook import HookSettings
 from .horizontal import BACK, FORWARD, Settings
+from .smooth import DURATIONS, GLIDES, SmoothSettings
 
 TRIGGERS = {
     "either": frozenset({BACK, FORWARD}),
@@ -18,6 +19,10 @@ TRIGGERS = {
     "forward": frozenset({FORWARD}),
 }
 TRIGGER_TEXTS = {"either": "Back or Forward", "back": "Back", "forward": "Forward"}
+DURATION_TEXTS = {"fast": "Fast", "normal": "Normal", "slow": "Slow"}
+GLIDE_TEXTS = {"short": "Short", "medium": "Medium", "long": "Long"}
+BYPASS_TEXTS = {"alt": "Alt", "ctrl": "Ctrl", "shift": "Shift", "win": "Win", "ctrl+alt": "Ctrl + Alt",
+                "ctrl+shift": "Ctrl + Shift", "alt+shift": "Alt + Shift", "none": "None"}
 
 
 class Config(QConfig):
@@ -35,10 +40,26 @@ class Config(QConfig):
     # Monitor Cursor
     cursorEnabled = ConfigItem("MonitorCursor", "Enabled", False, BoolValidator())
 
+    # Smooth Scroll
+    smoothEnabled = ConfigItem("SmoothScroll", "Enabled", False, BoolValidator())
+    smoothAnimation = ConfigItem("SmoothScroll", "Animation", True, BoolValidator())
+    smoothDuration = OptionsConfigItem("SmoothScroll", "AnimationTime", "normal", OptionsValidator(list(DURATIONS)))
+    smoothDistance = RangeConfigItem("SmoothScroll", "Distance", 10, RangeValidator(5, 30))  # tenths
+    smoothInertia = ConfigItem("SmoothScroll", "Inertia", True, BoolValidator())
+    smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDES)))
+    bypassKey = OptionsConfigItem("SmoothScroll", "BypassKey", "alt", OptionsValidator(list(BYPASS_TEXTS)))
+
     @classmethod
     def featureItems(cls) -> list:
         """The on/off switch of every feature."""
-        return [cls.horizontalEnabled, cls.cursorEnabled]
+        return [cls.horizontalEnabled, cls.cursorEnabled, cls.smoothEnabled]
+
+    @classmethod
+    def hookItems(cls) -> list:
+        """Every setting the mouse hook depends on."""
+        return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
+                cls.disableInFullscreen, cls.smoothAnimation, cls.smoothDuration, cls.smoothDistance,
+                cls.smoothInertia, cls.smoothGlide, cls.bypassKey]
 
 
 cfg = Config()
@@ -63,7 +84,23 @@ def hook_settings() -> HookSettings:
             speed=cfg.horizontalSpeed.value / 10,
         ),
         cursor=cfg.cursorEnabled.value,
+        smooth=smooth_settings(),
+        bypass=frozenset() if cfg.bypassKey.value == "none" else frozenset(cfg.bypassKey.value.split("+")),
         skip_fullscreen=cfg.disableInFullscreen.value,
+    )
+
+
+def smooth_settings():
+    """None when Smooth Scroll is off or would do nothing (no animation and 1.0x distance)."""
+    animate, distance = cfg.smoothAnimation.value, cfg.smoothDistance.value / 10
+    if not cfg.smoothEnabled.value or (not animate and distance == 1.0):
+        return None
+    return SmoothSettings(
+        animate=animate,
+        duration=DURATIONS[cfg.smoothDuration.value],
+        distance=distance,
+        inertia=animate and cfg.smoothInertia.value,  # inertia continues the animation
+        glide=GLIDES[cfg.smoothGlide.value],
     )
 
 

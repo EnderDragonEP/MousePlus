@@ -58,6 +58,10 @@ class Engine:
             self.latched = on
             self.on_latched(on)
 
+    def claims_wheel(self) -> bool:
+        """The wheel scrolls sideways right now: a trigger is held, or toggle mode is latched on."""
+        return bool(self.held) or (self.latched and self.settings.toggle_mode)
+
     def x_down(self, button: int) -> Result:
         if button not in self.settings.buttons:
             return PASS

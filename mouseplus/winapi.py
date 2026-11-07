@@ -24,6 +24,17 @@ WM_XBUTTONUP = 0x020C
 PM_NOREMOVE = 0x0000
 
 INPUT_MOUSE = 0
+INPUT_KEYBOARD = 1
+KEYEVENTF_KEYUP = 0x0002
+VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN = 0x10, 0x11, 0x12, 0x5B, 0x5C
+VK_MASK = 0xE8  # unassigned: tapping it while Alt/Win is held keeps a menu from opening on release
+GA_ROOT = 2
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+TOKEN_QUERY = 0x0008
+TOKEN_INTEGRITY_LEVEL = 25
+CREATE_WAITABLE_TIMER_HIGH_RESOLUTION = 0x2
+TIMER_ALL_ACCESS = 0x1F0003
+WAIT_TIMEOUT = 0x102
 MOUSEEVENTF_XDOWN = 0x0080
 MOUSEEVENTF_XUP = 0x0100
 MOUSEEVENTF_WHEEL = 0x0800
@@ -139,6 +150,26 @@ SetEvent = _fn(kernel32, "SetEvent", wintypes.BOOL, wintypes.HANDLE)
 CloseHandle = _fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 WaitForMultipleObjects = _fn(kernel32, "WaitForMultipleObjects", wintypes.DWORD,
                              wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE), wintypes.BOOL, wintypes.DWORD)
+GetAsyncKeyState = _fn(user32, "GetAsyncKeyState", ctypes.c_short, ctypes.c_int)
+WindowFromPoint = _fn(user32, "WindowFromPoint", wintypes.HWND, wintypes.POINT)
+GetAncestor = _fn(user32, "GetAncestor", wintypes.HWND, wintypes.HWND, wintypes.UINT)
+GetWindowThreadProcessId = _fn(user32, "GetWindowThreadProcessId", wintypes.DWORD,
+                               wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+OpenProcess = _fn(kernel32, "OpenProcess", wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+GetCurrentProcess = _fn(kernel32, "GetCurrentProcess", wintypes.HANDLE)
+OpenProcessToken = _fn(advapi32, "OpenProcessToken", wintypes.BOOL,
+                       wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE))
+GetTokenInformation = _fn(advapi32, "GetTokenInformation", wintypes.BOOL, wintypes.HANDLE, ctypes.c_int,
+                          ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+GetSidSubAuthorityCount = _fn(advapi32, "GetSidSubAuthorityCount", ctypes.POINTER(ctypes.c_ubyte), ctypes.c_void_p)
+GetSidSubAuthority = _fn(advapi32, "GetSidSubAuthority", ctypes.POINTER(wintypes.DWORD),
+                         ctypes.c_void_p, wintypes.DWORD)
+CreateWaitableTimerExW = _fn(kernel32, "CreateWaitableTimerExW", wintypes.HANDLE,
+                             ctypes.c_void_p, wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD)
+SetWaitableTimer = _fn(kernel32, "SetWaitableTimer", wintypes.BOOL, wintypes.HANDLE,
+                       ctypes.POINTER(ctypes.c_longlong), wintypes.LONG, ctypes.c_void_p, ctypes.c_void_p,
+                       wintypes.BOOL)
+CancelWaitableTimer = _fn(kernel32, "CancelWaitableTimer", wintypes.BOOL, wintypes.HANDLE)
 
 
 def _mouse_input(flags: int, data: int = 0) -> INPUT:
@@ -151,6 +182,82 @@ def send_hwheel(delta: int):
     """Inject a horizontal wheel event at the cursor (positive = scroll right)."""
     inp = _mouse_input(MOUSEEVENTF_HWHEEL, delta)
     SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+
+
+def send_wheel(delta: int):
+    """Inject a vertical wheel event at the cursor (positive = away from the user)."""
+    inp = _mouse_input(MOUSEEVENTF_WHEEL, delta)
+    SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+
+
+def send_mask_key():
+    """Tap an unassigned key, so releasing a held Alt/Win doesn't open a menu bar or Start."""
+    inputs = (INPUT * 2)()
+    for inp, flags in zip(inputs, (0, KEYEVENTF_KEYUP)):
+        inp.type = INPUT_KEYBOARD
+        inp.ki = KEYBDINPUT(VK_MASK, 0, flags, 0, MAGIC)
+    SendInput(2, inputs, ctypes.sizeof(INPUT))
+
+
+def held_modifiers() -> frozenset:
+    """The modifier keys held right now: any of "alt", "ctrl", "shift", "win"."""
+    down = lambda vk: GetAsyncKeyState(vk) & 0x8000
+    held = set()
+    if down(VK_MENU):
+        held.add("alt")
+    if down(VK_CONTROL):
+        held.add("ctrl")
+    if down(VK_SHIFT):
+        held.add("shift")
+    if down(VK_LWIN) or down(VK_RWIN):
+        held.add("win")
+    return frozenset(held)
+
+
+def root_window_at(x: int, y: int):
+    """The top-level window under a screen point."""
+    hwnd = WindowFromPoint(wintypes.POINT(x, y))
+    return GetAncestor(hwnd, GA_ROOT) if hwnd else None
+
+
+def _integrity(process) -> int:
+    """Integrity level RID of a process handle (e.g. 0x2000 medium, 0x3000 high); -1 if unknown."""
+    token = wintypes.HANDLE()
+    if not OpenProcessToken(process, TOKEN_QUERY, ctypes.byref(token)):
+        return -1
+    try:
+        size = wintypes.DWORD()
+        GetTokenInformation(token, TOKEN_INTEGRITY_LEVEL, None, 0, ctypes.byref(size))
+        buffer = ctypes.create_string_buffer(size.value)
+        if not GetTokenInformation(token, TOKEN_INTEGRITY_LEVEL, buffer, size, ctypes.byref(size)):
+            return -1
+        sid = ctypes.c_void_p.from_buffer(buffer).value  # TOKEN_MANDATORY_LABEL.Label.Sid
+        count = GetSidSubAuthorityCount(sid).contents.value
+        return GetSidSubAuthority(sid, count - 1).contents.value
+    finally:
+        CloseHandle(token)
+
+
+_OWN_INTEGRITY = None
+
+
+def window_is_elevated(hwnd) -> bool:
+    """True when the window's process runs at a higher integrity level than this app
+    (e.g. an app started as administrator). Windows blocks injected input there.
+    A process that can't be inspected counts as elevated, so its input is left alone."""
+    global _OWN_INTEGRITY
+    if _OWN_INTEGRITY is None:
+        _OWN_INTEGRITY = _integrity(GetCurrentProcess())
+    pid = wintypes.DWORD()
+    GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not process:
+        return True
+    try:
+        level = _integrity(process)
+    finally:
+        CloseHandle(process)
+    return level < 0 or level > _OWN_INTEGRITY
 
 
 def send_xclick(button: int):

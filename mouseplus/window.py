@@ -8,7 +8,7 @@ from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, Fluent
                             SwitchSettingCard, TitleLabel, setCustomStyleSheet, setFont)
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
-from .config import TRIGGER_TEXTS, cfg
+from .config import BYPASS_TEXTS, DURATION_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
 from .updates import UpdateChecker, is_newer
 
 
@@ -164,6 +164,53 @@ class CursorPage(Page):
             self.layoutCard.setContent(f"1 monitor · {sizes}. Connect another one to use this feature.")
 
 
+class SmoothPage(Page):
+    def __init__(self, parent=None):
+        super().__init__("smoothPage", "Smooth Scroll", parent)
+        self.enableCard = SwitchSettingCard(
+            FIF.SCROLL, "Smooth Scroll", "Turn this feature on or off", cfg.smoothEnabled, self.view)
+
+        self.scrolling = Group("Scrolling", self.view)
+        self.animationCard = SwitchSettingCard(
+            FIF.SPEED_MEDIUM, "Smooth scrolling", "Each wheel notch scrolls in small steps instead of one jump",
+            cfg.smoothAnimation, self.scrolling)
+        self.durationCard = ComboBoxSettingCard(
+            cfg.smoothDuration, FIF.STOP_WATCH, "Animation time", "How long each notch takes to play out",
+            texts=list(DURATION_TEXTS.values()), parent=self.scrolling)
+        self.distanceCard = MultiplierCard(cfg.smoothDistance, FIF.SPEED_HIGH, "Scroll distance",
+                                           "Distance per wheel notch", self.scrolling)
+        self.scrolling.addSettingCards([self.animationCard, self.durationCard, self.distanceCard])
+
+        self.inertia = Group("Inertia", self.view)
+        self.inertiaCard = SwitchSettingCard(
+            FIF.SEND, "Inertia", "A fast flick keeps scrolling and slows down gradually, like a touchpad",
+            cfg.smoothInertia, self.inertia)
+        self.glideCard = ComboBoxSettingCard(
+            cfg.smoothGlide, FIF.SPEED_OFF, "Glide", "How far a flick keeps going",
+            texts=list(GLIDE_TEXTS.values()), parent=self.inertia)
+        self.inertia.addSettingCards([self.inertiaCard, self.glideCard])
+
+        self.bypass = Group("Bypass", self.view)
+        self.bypassCard = ComboBoxSettingCard(
+            cfg.bypassKey, FIF.CANCEL, "Bypass key",
+            "Hold it for normal notched scrolling. Ctrl + wheel (zoom) always passes through.",
+            texts=list(BYPASS_TEXTS.values()), parent=self.bypass)
+        self.bypass.addSettingCard(self.bypassCard)
+
+        self.addWidgets(self.enableCard, self.scrolling, self.inertia, self.bypass)
+        self.setHint("The mouse wheel scrolls like a touchpad: smooth steps, and a fast flick keeps going. "
+                     "Back/Forward + wheel still scrolls sideways, unsmoothed.")
+        cfg.smoothAnimation.valueChanged.connect(self._updateCards)
+        cfg.smoothInertia.valueChanged.connect(self._updateCards)
+        self._updateCards()
+
+    def _updateCards(self, *_):
+        animate = cfg.smoothAnimation.value
+        self.durationCard.setEnabled(animate)
+        self.inertiaCard.setEnabled(animate)  # inertia continues the animation
+        self.glideCard.setEnabled(animate and cfg.smoothInertia.value)
+
+
 class GeneralPage(Page):
     def __init__(self, parent=None):
         super().__init__("generalPage", "General", parent)
@@ -194,11 +241,13 @@ class SettingsWindow(MSFluentWindow):
 
         self.horizontalPage = HorizontalPage(self)
         self.cursorPage = CursorPage(self)
+        self.smoothPage = SmoothPage(self)
         self.generalPage = GeneralPage(self)
         self.addSubInterface(self.horizontalPage, icons.glyph_icon(), "Horizontal",
                              selectedIcon=icons.glyph_icon(accent=True))
         self.addSubInterface(self.cursorPage, icons.monitors_icon(), "Cursor",
                              selectedIcon=icons.monitors_icon(accent=True))
+        self.addSubInterface(self.smoothPage, FIF.SCROLL, "Smooth")
         self.addSubInterface(self.generalPage, FIF.SETTING, "General", position=NavigationItemPosition.BOTTOM)
 
         self.setMinimumWidth(600)
