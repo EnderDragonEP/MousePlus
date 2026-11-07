@@ -34,6 +34,7 @@ class HookSettings:
     cursor: bool = False                     # Monitor Cursor: proportional moves between monitors
     smooth: Optional[SmoothSettings] = None  # Smooth Scroll; None when off
     bypass: frozenset = frozenset({"alt"})   # keys that make the wheel pass through untouched
+    excluded: frozenset = frozenset()        # programs Smooth Scroll stays out of ("xnviewmp.exe")
     skip_fullscreen: bool = True             # every feature stays out of full-screen apps
 
 
@@ -77,6 +78,7 @@ class MouseHook(QObject):
         # Smooth Scroll state
         self._smoothing = False       # set by the output thread while it animates
         self._elevation = {}          # root window -> elevated, hook thread only
+        self._programs = {}           # window -> program file name, hook thread only
         self._mask_time = 0.0
         self._scroller = SmoothScroller()  # output thread only
         self._gesture = None          # (root window, modifiers) the animation started with
@@ -370,10 +372,20 @@ class MouseHook(QObject):
                 self._elevation[root] = bool(root) and w.window_is_elevated(root)
             return self._elevation[root]
 
+        def excluded():
+            if not settings.excluded:
+                return False
+            hwnd = w.window_at(x, y)
+            if hwnd not in self._programs:
+                if len(self._programs) > 64:
+                    self._programs.clear()
+                self._programs[hwnd] = w.program_name(hwnd) if hwnd else ""
+            return self._programs[hwnd] in settings.excluded
+
         decision = route_wheel(
             WheelEvent(delta, self._engine.claims_wheel(), modifiers, settings.smooth is not None, settings.bypass),
             fullscreen=lambda: settings.skip_fullscreen and self._cached_fullscreen(),
-            elevated=elevated)
+            elevated=elevated, excluded=excluded)
         if decision.stop and self._smoothing:
             self._send(("stop",))
         if decision.mask:

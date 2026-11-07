@@ -1,5 +1,6 @@
 """Win32 bindings (ctypes) for the mouse hook, input injection and full-screen detection."""
 import ctypes
+import os
 from ctypes import wintypes
 
 from .cursor import Rect
@@ -8,6 +9,7 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 shell32 = ctypes.WinDLL("shell32", use_last_error=True)
 advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+dwmapi = ctypes.WinDLL("dwmapi")
 
 LRESULT = wintypes.LPARAM
 ULONG_PTR = ctypes.c_size_t
@@ -50,7 +52,11 @@ INFINITE = 0xFFFFFFFF
 WAIT_OBJECT_0 = 0
 MONITOR_DEFAULTTONEAREST = 2
 GWL_STYLE = -16
+GWL_EXSTYLE = -20
 WS_CAPTION = 0x00C00000
+WS_EX_TOOLWINDOW = 0x00000080
+GW_OWNER = 4
+DWMWA_CLOAKED = 14
 
 # Tags every event we inject (dwExtraInfo) so our own hook lets it through. Keep the value:
 # Horizontal Scroll used the same tag, so an old copy and Mouse Plus ignore each other's events.
@@ -117,6 +123,7 @@ class MONITORINFO(ctypes.Structure):
 HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
 MONITORENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC,
                                      ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
+WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
 
 def _fn(dll, name, restype, *argtypes):
@@ -190,6 +197,17 @@ IsWindowVisible = _fn(user32, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
 SetWindowPos = _fn(user32, "SetWindowPos", wintypes.BOOL, wintypes.HWND, wintypes.HWND,
                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT)
 GetDpiForWindow = _fn(user32, "GetDpiForWindow", wintypes.UINT, wintypes.HWND)
+QueryFullProcessImageNameW = _fn(kernel32, "QueryFullProcessImageNameW", wintypes.BOOL, wintypes.HANDLE,
+                                 wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD))
+GetCurrentProcessId = _fn(kernel32, "GetCurrentProcessId", wintypes.DWORD)
+EnumWindows = _fn(user32, "EnumWindows", wintypes.BOOL, WNDENUMPROC, wintypes.LPARAM)
+GetWindow = _fn(user32, "GetWindow", wintypes.HWND, wintypes.HWND, wintypes.UINT)
+GetWindowTextW = _fn(user32, "GetWindowTextW", ctypes.c_int, wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+GetWindowTextLengthW = _fn(user32, "GetWindowTextLengthW", ctypes.c_int, wintypes.HWND)
+FindWindowExW = _fn(user32, "FindWindowExW", wintypes.HWND,
+                    wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
+DwmGetWindowAttribute = _fn(dwmapi, "DwmGetWindowAttribute", ctypes.c_long,
+                            wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD)
 
 
 def _mouse_input(flags: int, data: int = 0) -> INPUT:
@@ -238,6 +256,67 @@ def root_window_at(x: int, y: int):
     """The top-level window under a screen point."""
     hwnd = WindowFromPoint(wintypes.POINT(x, y))
     return GetAncestor(hwnd, GA_ROOT) if hwnd else None
+
+
+def window_at(x: int, y: int):
+    """The window under a screen point, child windows included. In a Store app that's the
+    app's own content window, not the frame Windows draws around it."""
+    return WindowFromPoint(wintypes.POINT(x, y))
+
+
+def program_path(hwnd) -> str:
+    """Full path of the program that owns a window; '' if it can't be read."""
+    pid = wintypes.DWORD()
+    GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not process:
+        return ""
+    try:
+        size = wintypes.DWORD(1024)
+        path = ctypes.create_unicode_buffer(size.value)
+        return path.value if QueryFullProcessImageNameW(process, 0, path, ctypes.byref(size)) else ""
+    finally:
+        CloseHandle(process)
+
+
+def program_name(hwnd) -> str:
+    """Lowercase file name of the program that owns a window, e.g. 'xnviewmp.exe'; '' if unknown."""
+    return os.path.basename(program_path(hwnd)).lower()
+
+
+def open_apps() -> list:
+    """(program path, window title) for each app with a window on the taskbar, front to back:
+    one entry per program, this app left out."""
+    apps, seen, own = [], set(), GetCurrentProcessId()
+    name = ctypes.create_unicode_buffer(64)
+
+    def collect(hwnd, _):
+        if (not IsWindowVisible(hwnd) or GetWindow(hwnd, GW_OWNER)
+                or GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW):
+            return True
+        cloaked = wintypes.DWORD()  # hidden by Windows: other virtual desktops, suspended Store apps
+        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, ctypes.byref(cloaked), ctypes.sizeof(cloaked))
+        length = GetWindowTextLengthW(hwnd)
+        GetClassNameW(hwnd, name, len(name))
+        if cloaked.value or not length or name.value in ("Progman", "WorkerW"):  # the desktop
+            return True
+        owner = hwnd
+        if name.value == "ApplicationFrameWindow":  # a Store app: the app itself is a child window
+            owner = FindWindowExW(hwnd, None, "Windows.UI.Core.CoreWindow", None)
+            if not owner:
+                return True
+        pid = wintypes.DWORD()
+        GetWindowThreadProcessId(owner, ctypes.byref(pid))
+        path = program_path(owner) if pid.value != own else ""
+        if path and path.lower() not in seen:
+            seen.add(path.lower())
+            title = ctypes.create_unicode_buffer(length + 1)
+            GetWindowTextW(hwnd, title, length + 1)
+            apps.append((path, title.value))
+        return True
+
+    EnumWindows(WNDENUMPROC(collect), 0)
+    return apps
 
 
 def _integrity(process) -> int:

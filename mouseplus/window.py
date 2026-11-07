@@ -8,6 +8,7 @@ from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, Fluent
                             SettingCardGroup, SwitchSettingCard, TitleLabel, setCustomStyleSheet, setFont)
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
+from .applist import AppListCard
 from .config import BYPASS_TEXTS, DURATION_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
 from .monitormap import MonitorMap
 from .updates import UpdateChecker, is_newer
@@ -217,7 +218,10 @@ class SmoothPage(Page):
             cfg.bypassKey, FIF.CANCEL, "Bypass key",
             "Hold it for normal notched scrolling. Ctrl + wheel (zoom) always passes through.",
             texts=list(BYPASS_TEXTS.values()), parent=self.bypass)
-        self.bypass.addSettingCard(self.bypassCard)
+        self.appsCard = AppListCard(
+            cfg.smoothExcluded, FIF.APPLICATION, "Apps that scroll normally",
+            "For apps that react to every wheel step, like image viewers", self.bypass)
+        self.bypass.addSettingCards([self.bypassCard, self.appsCard])
 
         self.experimental = Group("Experimental", self.view)
         self.bounceCard = SwitchSettingCard(

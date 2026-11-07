@@ -5,7 +5,7 @@ import sys
 import winreg
 from pathlib import Path
 
-from qfluentwidgets import (BoolValidator, ConfigItem, OptionsConfigItem, OptionsValidator, QConfig,
+from qfluentwidgets import (BoolValidator, ConfigItem, ConfigValidator, OptionsConfigItem, OptionsValidator, QConfig,
                             RangeConfigItem, RangeValidator, qconfig)
 
 from . import APP_ID, CONFIG_FILE
@@ -23,6 +23,39 @@ DURATION_TEXTS = {"fast": "Fast", "normal": "Normal", "slow": "Slow"}
 GLIDE_TEXTS = {"short": "Short", "medium": "Medium", "long": "Long"}
 BYPASS_TEXTS = {"alt": "Alt", "ctrl": "Ctrl", "shift": "Shift", "win": "Win", "ctrl+alt": "Ctrl + Alt",
                 "ctrl+shift": "Ctrl + Shift", "alt+shift": "Alt + Shift", "none": "None"}
+# Smooth Scroll stays out of these programs at first. Many image viewers flip one image per wheel
+# message, however small, so a smoothed notch (a few dozen small messages) would flip through dozens.
+IMAGE_VIEWERS = {
+    "xnviewmp.exe": "XnView MP",
+    "xnview.exe": "XnView Classic",
+    "i_view64.exe": "IrfanView",
+    "i_view32.exe": "IrfanView (32-bit)",
+    "fsviewer.exe": "FastStone Image Viewer",
+    "imageglass.exe": "ImageGlass",
+    "honeyview.exe": "Honeyview",
+    "bandiview.exe": "BandiView",
+    "nomacs.exe": "nomacs",
+    "jpegview.exe": "JPEGView",
+    "qimgv.exe": "qimgv",
+}
+
+
+def program_names(values) -> list:
+    """Program file names as stored: lowercase, trimmed, no blanks or duplicates, in order."""
+    names = []
+    for value in values if isinstance(values, list) else []:
+        name = value.strip().lower() if isinstance(value, str) else ""
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+class ProgramListValidator(ConfigValidator):
+    def validate(self, value):
+        return value == program_names(value)
+
+    def correct(self, value):
+        return program_names(value)
 
 
 class Config(QConfig):
@@ -51,6 +84,7 @@ class Config(QConfig):
     smoothMomentum = RangeConfigItem("SmoothScroll", "InertiaMultiplier", 10, RangeValidator(5, 30))  # tenths
     smoothBrake = ConfigItem("SmoothScroll", "ReverseStopsGlide", True, BoolValidator())
     bypassKey = OptionsConfigItem("SmoothScroll", "BypassKey", "alt", OptionsValidator(list(BYPASS_TEXTS)))
+    smoothExcluded = ConfigItem("SmoothScroll", "ExcludedApps", list(IMAGE_VIEWERS), ProgramListValidator())
     smoothBounce = ConfigItem("SmoothScroll", "Bounce", False, BoolValidator())  # experimental
 
     @classmethod
@@ -63,7 +97,8 @@ class Config(QConfig):
         """Every setting the mouse hook depends on."""
         return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
                 cls.disableInFullscreen, cls.smoothAnimation, cls.smoothDuration, cls.smoothDistance,
-                cls.smoothInertia, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.bypassKey, cls.smoothBounce]
+                cls.smoothInertia, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.bypassKey,
+                cls.smoothExcluded, cls.smoothBounce]
 
 
 cfg = Config()
@@ -90,6 +125,7 @@ def hook_settings() -> HookSettings:
         cursor=cfg.cursorEnabled.value,
         smooth=smooth_settings(),
         bypass=frozenset() if cfg.bypassKey.value == "none" else frozenset(cfg.bypassKey.value.split("+")),
+        excluded=frozenset(cfg.smoothExcluded.value),
         skip_fullscreen=cfg.disableInFullscreen.value,
     )
 

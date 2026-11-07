@@ -29,6 +29,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 - 🧈 **Smooth steps** – Each wheel notch scrolls in small steps instead of one jump. Pick the animation time and scroll distance.
 - 🛝 **Inertia** – A fast flick keeps scrolling and slows down gradually. Set how strongly it glides (0.5×–3.0×) and how slowly it stops. A click, Back/Forward or the bypass key stop it at once. Turning the wheel back stops it too, and by default that notch only stops the glide instead of scrolling back (a setting).
 - ⌨️ **Bypass key** – Hold Alt (or the key you pick) for normal notched scrolling and your apps' own Alt + wheel shortcuts. Ctrl + wheel (zoom) always passes through untouched.
+- 🖼️ **Apps that scroll normally** – Smooth Scroll stays out of the apps on a list: apps that react to every wheel step, like image viewers that would otherwise flip through dozens of images per notch. XnView, IrfanView, FastStone, ImageGlass and other common viewers are on it already; add more from the Smooth tab.
 - 🧪 **Overscroll bounce** – Experimental and off by default: the window springs back a little at the end of a page (see the limitations).
 
 ### Everywhere
@@ -45,7 +46,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 - **Admin windows:** the features don't act over windows of apps running as administrator unless Mouse Plus also runs as administrator. Windows blocks this; the wheel simply scrolls normally there.
 - **Horizontal Scroll:** apps without horizontal-scroll support won't scroll sideways. If mouse software (for example Logitech Options+) remaps Back/Forward to keystrokes, the app never sees the buttons. In hold mode, Back/Forward fires on button release, a moment later than usual.
 - **Monitor Cursor:** while it's on, Mouse Plus decides every crossing itself, so Windows 11's "Ease cursor movement between displays" no longer applies at shared edges.
-- **Smooth Scroll:** the few apps that ignore wheel steps smaller than a notch (some older apps and games) won't scroll smoothly. Inertia stops when the cursor moves to another window, because Windows sends the wheel to the window under the cursor.
+- **Smooth Scroll:** the few apps that ignore wheel steps smaller than a notch (some older apps and games) won't scroll smoothly. Apps that act on every wheel step, however small, jump much too far: add them to the apps that scroll normally (common image viewers are there already). Inertia stops when the cursor moves to another window, because Windows sends the wheel to the window under the cursor.
 - **Overscroll bounce:** Windows can't tell other programs when an app hits the end of a page, so the bounce only works in apps with classic Windows scrollbars (like Notepad++), and never moves maximized windows. A snapped window may lose its snap layout after a bounce.
 - Single-file PyInstaller exes are sometimes flagged by antivirus heuristics. If that happens, build a one-folder version instead by moving `a.binaries`/`a.datas` into a `COLLECT` step in the spec.
 
@@ -97,6 +98,7 @@ mouseplus/migrate.py     one-time move of settings and autostart from Horizontal
 mouseplus/accent.py      Windows accent shades + watcher for accent changes
 mouseplus/window.py      Fluent settings window, one tab per feature
 mouseplus/monitormap.py  monitor layout drawing on the Cursor tab, with a live cursor dot
+mouseplus/applist.py     the Smooth tab's list of apps that scroll normally, and the picker that adds one
 mouseplus/tray.py        tray icon and menu
 mouseplus/osd.py         toggle-mode on/off pill
 mouseplus/icons.py       icons drawn in code + .ico writer for the build

@@ -7,13 +7,15 @@ NONE = frozenset()
 
 
 def route(delta=-120, horizontal=False, modifiers=NONE, smooth=True, bypass=ALT,
-          fullscreen=False, elevated=False):
+          fullscreen=False, elevated=False, excluded=False):
     def must_not_be_called():
         raise AssertionError("checked although an earlier rule already decided")
 
+    def check(value):
+        return (lambda: value) if value is not None else must_not_be_called
+
     return route_wheel(WheelEvent(delta, horizontal, frozenset(modifiers), smooth, bypass),
-                       (lambda: fullscreen) if fullscreen is not None else must_not_be_called,
-                       (lambda: elevated) if elevated is not None else must_not_be_called)
+                       check(fullscreen), check(elevated), check(excluded))
 
 
 class RouteWheelTest(unittest.TestCase):
@@ -64,6 +66,18 @@ class RouteWheelTest(unittest.TestCase):
 
     def test_elevated_window_passes(self):
         self.assertEqual(route(elevated=True), Decision(PASS))
+
+    def test_app_on_the_list_passes(self):
+        self.assertEqual(route(excluded=True, elevated=None), Decision(PASS))  # no need to look further
+
+    def test_app_list_is_only_checked_for_plain_notches(self):
+        for rule in (dict(horizontal=True, fullscreen=None), dict(fullscreen=True), dict(modifiers=ALT),
+                     dict(modifiers={"ctrl"}), dict(smooth=False), dict(delta=40)):
+            route(**rule, elevated=None, excluded=None)  # raises if the list is looked up
+
+    def test_the_list_doesnt_touch_horizontal_scroll(self):
+        self.assertEqual(route(horizontal=True, fullscreen=None, elevated=None, excluded=None),
+                         Decision(HORIZONTAL, stop=True))
 
 
 if __name__ == "__main__":

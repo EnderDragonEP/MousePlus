@@ -1,8 +1,8 @@
 """Which feature handles a wheel event: Horizontal Scroll, Smooth Scroll or neither (pass through).
 
 Pure Python so the precedence can be unit-tested. Checks that need Win32 (full-screen
-app in front, elevated window under the cursor) are passed in as callables and only
-called when they matter, cheapest checks first.
+app in front, the app or elevated window under the cursor) are passed in as callables
+and only called when they matter, cheapest checks first.
 """
 from dataclasses import dataclass
 from typing import Callable
@@ -28,15 +28,17 @@ class WheelEvent:
     bypass: frozenset      # keys that make the wheel pass through; empty for none
 
 
-def route_wheel(event: WheelEvent, fullscreen: Callable[[], bool], elevated: Callable[[], bool]) -> Decision:
+def route_wheel(event: WheelEvent, fullscreen: Callable[[], bool], elevated: Callable[[], bool],
+                excluded: Callable[[], bool] = lambda: False) -> Decision:
     """First match wins:
 
     1. Back/Forward + wheel, or a latched toggle: Horizontal Scroll, unchanged.
     2. Full-screen app in front: pass.
     3. Bypass keys held: pass untouched (normal notches, the app's own Alt+wheel and so on).
     4. Ctrl held: pass. Zoom is step-based; smoothing or inertia would overshoot.
-    5. Smooth Scroll off, a finer-than-notch delta (hi-res wheel, touchpad) or an
-       elevated window under the cursor (Windows blocks injected input there): pass.
+    5. Smooth Scroll off, a finer-than-notch delta (hi-res wheel, touchpad), an app on the
+       list under the cursor (e.g. an image viewer that flips an image per wheel message)
+       or an elevated window there (Windows blocks injected input): pass.
     6. Otherwise Smooth Scroll.
     """
     if event.horizontal:
@@ -47,6 +49,6 @@ def route_wheel(event: WheelEvent, fullscreen: Callable[[], bool], elevated: Cal
         return Decision(PASS, stop=True, mask=bool(event.bypass & MASKED))
     if "ctrl" in event.modifiers:
         return Decision(PASS, stop=True)
-    if not event.smooth or event.delta % NOTCH or elevated():
+    if not event.smooth or event.delta % NOTCH or excluded() or elevated():
         return Decision(PASS)
     return Decision(SMOOTH)
