@@ -9,6 +9,7 @@ from qfluentwidgets import (BoolValidator, ConfigItem, OptionsConfigItem, Option
                             RangeConfigItem, RangeValidator, qconfig)
 
 from . import APP_ID, CONFIG_FILE
+from .hook import HookSettings
 from .horizontal import BACK, FORWARD, Settings
 
 TRIGGERS = {
@@ -31,6 +32,14 @@ class Config(QConfig):
     horizontalReverse = ConfigItem("HorizontalScroll", "Reverse", False, BoolValidator())
     horizontalSpeed = RangeConfigItem("HorizontalScroll", "Speed", 10, RangeValidator(5, 30))  # tenths: 10 = 1.0x
 
+    # Monitor Cursor
+    cursorEnabled = ConfigItem("MonitorCursor", "Enabled", False, BoolValidator())
+
+    @classmethod
+    def featureItems(cls) -> list:
+        """The on/off switch of every feature."""
+        return [cls.horizontalEnabled, cls.cursorEnabled]
+
 
 cfg = Config()
 
@@ -39,13 +48,22 @@ def load():
     qconfig.load(CONFIG_FILE, cfg)
 
 
-def horizontal_settings() -> Settings:
-    return Settings(
-        buttons=TRIGGERS[cfg.trigger.value],
-        toggle_mode=cfg.toggleMode.value,
+def any_feature_on() -> bool:
+    return any(item.value for item in cfg.featureItems())
+
+
+def hook_settings() -> HookSettings:
+    horizontal = cfg.horizontalEnabled.value
+    return HookSettings(
+        horizontal=Settings(
+            buttons=TRIGGERS[cfg.trigger.value] if horizontal else frozenset(),  # no trigger: feature off
+            toggle_mode=horizontal and cfg.toggleMode.value,
+            skip_fullscreen=cfg.disableInFullscreen.value,
+            reverse=cfg.horizontalReverse.value,
+            speed=cfg.horizontalSpeed.value / 10,
+        ),
+        cursor=cfg.cursorEnabled.value,
         skip_fullscreen=cfg.disableInFullscreen.value,
-        reverse=cfg.horizontalReverse.value,
-        speed=cfg.horizontalSpeed.value / 10,
     )
 
 

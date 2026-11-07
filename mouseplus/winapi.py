@@ -2,6 +2,8 @@
 import ctypes
 from ctypes import wintypes
 
+from .cursor import Rect
+
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 shell32 = ctypes.WinDLL("shell32", use_last_error=True)
@@ -88,6 +90,8 @@ class MONITORINFO(ctypes.Structure):
 
 
 HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+MONITORENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC,
+                                     ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
 
 
 def _fn(dll, name, restype, *argtypes):
@@ -119,6 +123,10 @@ GetMonitorInfoW = _fn(user32, "GetMonitorInfoW", wintypes.BOOL, wintypes.HMONITO
 IsZoomed = _fn(user32, "IsZoomed", wintypes.BOOL, wintypes.HWND)
 GetWindowLongW = _fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int)
 AllowSetForegroundWindow = _fn(user32, "AllowSetForegroundWindow", wintypes.BOOL, wintypes.DWORD)
+SetCursorPos = _fn(user32, "SetCursorPos", wintypes.BOOL, ctypes.c_int, ctypes.c_int)
+GetCursorPos = _fn(user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintypes.POINT))
+EnumDisplayMonitors = _fn(user32, "EnumDisplayMonitors", wintypes.BOOL,
+                          wintypes.HDC, ctypes.POINTER(wintypes.RECT), MONITORENUMPROC, wintypes.LPARAM)
 GetCurrentThreadId = _fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
 GetModuleHandleW = _fn(kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR)
 SetCurrentProcessExplicitAppUserModelID = _fn(shell32, "SetCurrentProcessExplicitAppUserModelID",
@@ -150,6 +158,25 @@ def send_xclick(button: int):
     inputs = (INPUT * 2)(_mouse_input(MOUSEEVENTF_XDOWN, button),
                          _mouse_input(MOUSEEVENTF_XUP, button))
     SendInput(2, inputs, ctypes.sizeof(INPUT))
+
+
+def cursor_pos() -> tuple:
+    point = wintypes.POINT()
+    GetCursorPos(ctypes.byref(point))
+    return point.x, point.y
+
+
+def monitor_rects() -> list:
+    """Every monitor's rectangle in physical pixels (Qt makes the process per-monitor DPI aware)."""
+    rects = []
+
+    def collect(monitor, dc, rect, data):
+        r = rect.contents
+        rects.append(Rect(r.left, r.top, r.right, r.bottom))
+        return True
+
+    EnumDisplayMonitors(None, None, MONITORENUMPROC(collect), 0)
+    return rects
 
 
 _SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}

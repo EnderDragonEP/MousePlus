@@ -63,6 +63,23 @@ def paint_glyph(p: QPainter, rect: QRectF, color: QColor, fill: QColor = None, w
     p.restore()
 
 
+def paint_monitors(p: QPainter, rect: QRectF, color: QColor):
+    """Two monitors of different sizes (the Monitor Cursor feature)."""
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.translate(rect.topLeft())
+    p.scale(rect.width() / 24, rect.height() / 24)
+    p.setPen(_pen(color))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(1.8, 4.5, 11.4, 8.5), 1.4, 1.4)
+    p.drawLine(QPointF(7.5, 13), QPointF(7.5, 16.5))
+    p.drawLine(QPointF(4.8, 16.5), QPointF(10.2, 16.5))
+    p.drawRoundedRect(QRectF(15.2, 7, 7, 6), 1.2, 1.2)
+    p.drawLine(QPointF(18.7, 13), QPointF(18.7, 15.6))
+    p.drawLine(QPointF(17, 15.6), QPointF(20.4, 15.6))
+    p.restore()
+
+
 def _paint_app_glyph(p: QPainter):
     """The full-color mouse, in the 24x24 grid."""
     blue = QLinearGradient(0, 3.5, 0, 20.5)
@@ -134,11 +151,12 @@ def app_icon() -> QIcon:
     return _icon(_paint_app)
 
 
-class _ThemedGlyph(QIconEngine):
-    """Paints the glyph in the current Fluent theme's text color (or accent), like FluentIcon does."""
+class _Themed(QIconEngine):
+    """Paints a glyph in the current Fluent theme's text color (or accent), like FluentIcon does."""
 
-    def __init__(self, accent: bool = False):
+    def __init__(self, paint, accent: bool = False):
         super().__init__()
+        self.paint_glyph = paint
         self.accent = accent
 
     def paint(self, painter, rect, mode, state):
@@ -148,14 +166,19 @@ class _ThemedGlyph(QIconEngine):
             color = themeColor()
         else:
             color = QColor(255, 255, 255, 230) if isDarkTheme() else QColor(0, 0, 0, 228)
-        paint_glyph(painter, QRectF(rect), color)
+        self.paint_glyph(painter, QRectF(rect), color)
 
     def clone(self):
-        return _ThemedGlyph(self.accent)
+        return _Themed(self.paint_glyph, self.accent)
 
 
 def glyph_icon(accent: bool = False) -> QIcon:
-    return QIcon(_ThemedGlyph(accent))
+    """The Horizontal Scroll glyph: a mouse between two chevrons."""
+    return QIcon(_Themed(paint_glyph, accent))
+
+
+def monitors_icon(accent: bool = False) -> QIcon:
+    return QIcon(_Themed(paint_monitors, accent))
 
 
 def light_taskbar() -> bool:

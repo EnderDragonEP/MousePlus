@@ -13,7 +13,8 @@ _SECONDARY = (QColor(96, 96, 96), QColor(206, 206, 206))  # light, dark
 
 def active_features() -> list:
     """Names of the features that are switched on."""
-    features = [("Horizontal Scroll", cfg.horizontalEnabled.value)]
+    features = [("Horizontal Scroll", cfg.horizontalEnabled.value),
+                ("Monitor Cursor", cfg.cursorEnabled.value)]
     return [name for name, on in features if on]
 
 
@@ -74,7 +75,7 @@ class Tray(QSystemTrayIcon):
         self.setContextMenu(self.menu)
 
         self.activated.connect(self._onActivated)
-        for item in (cfg.horizontalEnabled, cfg.toggleMode, cfg.trigger):
+        for item in (*cfg.featureItems(), cfg.toggleMode, cfg.trigger):
             item.valueChanged.connect(self.refresh)
         self.refresh()
 

@@ -102,6 +102,8 @@ class App(QObject):
         self.accentWatcher = AccentWatcher(self)
         # Windows writes several accent values in a row; react once they settle.
         self.accentTimer = QTimer(self, singleShot=True, interval=300, timeout=self._onAccentChanged)
+        # Plugging in, removing or rearranging monitors also arrives as a burst of signals.
+        self.screensTimer = QTimer(self, singleShot=True, interval=300, timeout=self._onScreensChanged)
         self.server = QLocalServer(self)
         self.server.listen(SERVER_NAME)
 
@@ -115,14 +117,19 @@ class App(QObject):
         self.hook.failed.connect(self._onHookFailed)
         self.themeListener.systemThemeChanged.connect(self._onAccentChanged)  # dark/light use different shades
         self.accentWatcher.changed.connect(self.accentTimer.start)
-        for item in (cfg.horizontalEnabled, cfg.trigger, cfg.toggleMode, cfg.disableInFullscreen,
+        for item in (*cfg.featureItems(), cfg.trigger, cfg.toggleMode, cfg.disableInFullscreen,
                      cfg.horizontalReverse, cfg.horizontalSpeed):
             item.valueChanged.connect(self._apply)
+        qapp.screenAdded.connect(self._watchScreen)
+        qapp.screenRemoved.connect(lambda *_: self.screensTimer.start())
+        for screen in qapp.screens():
+            self._watchScreen(screen, refresh=False)
         qapp.aboutToQuit.connect(self._shutdown)
 
         self.tray.show()
         self.themeListener.start()
         self.accentWatcher.start()
+        self._onScreensChanged()
         self._apply()
         if show_window:
             self.window.present()
@@ -132,10 +139,21 @@ class App(QObject):
                                   self.window.windowIcon(), 8000)
 
     def _apply(self, *_):
-        if not self.paused and cfg.horizontalEnabled.value:
-            self.hook.start(config.horizontal_settings())  # updates the settings if already running
+        if not self.paused and config.any_feature_on():
+            self.hook.start(config.hook_settings())  # updates the settings if already running
         else:
             self.hook.stop()
+
+    def _watchScreen(self, screen, refresh=True):
+        for signal in (screen.geometryChanged, screen.logicalDotsPerInchChanged, screen.physicalDotsPerInchChanged):
+            signal.connect(lambda *_: self.screensTimer.start())
+        if refresh:
+            self.screensTimer.start()
+
+    def _onScreensChanged(self):
+        monitors = winapi.monitor_rects()
+        self.hook.set_monitors(monitors)
+        self.window.cursorPage.setMonitors(monitors)
 
     def _togglePause(self):
         self.paused = not self.paused

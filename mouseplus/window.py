@@ -4,8 +4,8 @@ from PyQt6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
 from PyQt6.QtWidgets import QHBoxLayout, QWidget
 from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, FluentIcon as FIF, HyperlinkLabel, InfoBar,
                             InfoBarPosition, MessageBox, MSFluentWindow, NavigationItemPosition,
-                            PrimaryPushSettingCard, RangeSettingCard, ScrollArea, SettingCardGroup, SwitchSettingCard,
-                            TitleLabel, setCustomStyleSheet, setFont)
+                            PrimaryPushSettingCard, RangeSettingCard, ScrollArea, SettingCard, SettingCardGroup,
+                            SwitchSettingCard, TitleLabel, setCustomStyleSheet, setFont)
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
 from .config import TRIGGER_TEXTS, cfg
@@ -140,6 +140,30 @@ class HorizontalPage(Page):
         self.setHint(text)
 
 
+class CursorPage(Page):
+    def __init__(self, parent=None):
+        super().__init__("cursorPage", "Monitor Cursor", parent)
+        self.enableCard = SwitchSettingCard(
+            icons.monitors_icon(), "Proportional cursor", "Turn this feature on or off",
+            cfg.cursorEnabled, self.view)
+
+        self.monitors = Group("Monitors", self.view)
+        self.layoutCard = SettingCard(FIF.TILES, "Detected monitors", "…", self.monitors)
+        self.monitors.addSettingCard(self.layoutCard)
+
+        self.addWidgets(self.enableCard, self.monitors)
+        self.setHint("When the cursor moves to another monitor, it lands at the same relative spot along the "
+                     "shared edge, even where the monitors don't line up. It works while dragging, too.")
+
+    def setMonitors(self, monitors):
+        monitors = sorted(monitors, key=lambda m: (m.left, m.top))  # as arranged on the desk
+        sizes = ", ".join(f"{m.width}×{m.height}" for m in monitors)
+        if len(monitors) > 1:
+            self.layoutCard.setContent(f"{len(monitors)} monitors · {sizes}")
+        else:
+            self.layoutCard.setContent(f"1 monitor · {sizes}. Connect another one to use this feature.")
+
+
 class GeneralPage(Page):
     def __init__(self, parent=None):
         super().__init__("generalPage", "General", parent)
@@ -169,9 +193,12 @@ class SettingsWindow(MSFluentWindow):
         self.setWindowIcon(icons.app_icon())
 
         self.horizontalPage = HorizontalPage(self)
+        self.cursorPage = CursorPage(self)
         self.generalPage = GeneralPage(self)
         self.addSubInterface(self.horizontalPage, icons.glyph_icon(), "Horizontal",
                              selectedIcon=icons.glyph_icon(accent=True))
+        self.addSubInterface(self.cursorPage, icons.monitors_icon(), "Cursor",
+                             selectedIcon=icons.monitors_icon(accent=True))
         self.addSubInterface(self.generalPage, FIF.SETTING, "General", position=NavigationItemPosition.BOTTOM)
 
         self.setMinimumWidth(600)
