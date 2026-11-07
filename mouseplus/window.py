@@ -185,10 +185,16 @@ class SmoothPage(Page):
         self.inertiaCard = SwitchSettingCard(
             FIF.SEND, "Inertia", "A fast flick keeps scrolling and slows down gradually, like a touchpad",
             cfg.smoothInertia, self.inertia)
+        self.momentumCard = MultiplierCard(cfg.smoothMomentum, FIF.ZOOM_IN, "Inertia multiplier",
+                                           "How fast a flick keeps going, and so how far", self.inertia)
         self.glideCard = ComboBoxSettingCard(
-            cfg.smoothGlide, FIF.SPEED_OFF, "Glide", "How far a flick keeps going",
+            cfg.smoothGlide, FIF.SPEED_OFF, "Glide", "How slowly a flick comes to a stop",
             texts=list(GLIDE_TEXTS.values()), parent=self.inertia)
-        self.inertia.addSettingCards([self.inertiaCard, self.glideCard])
+        self.brakeCard = SwitchSettingCard(
+            FIF.PAUSE, "Reverse wheel stops the glide",
+            "Turning the wheel back during a glide just stops it, without scrolling back",
+            cfg.smoothBrake, self.inertia)
+        self.inertia.addSettingCards([self.inertiaCard, self.momentumCard, self.glideCard, self.brakeCard])
 
         self.bypass = Group("Bypass", self.view)
         self.bypassCard = ComboBoxSettingCard(
@@ -215,7 +221,8 @@ class SmoothPage(Page):
         animate = cfg.smoothAnimation.value
         self.durationCard.setEnabled(animate)
         self.inertiaCard.setEnabled(animate)  # inertia continues the animation
-        self.glideCard.setEnabled(animate and cfg.smoothInertia.value)
+        for card in (self.momentumCard, self.glideCard, self.brakeCard):
+            card.setEnabled(animate and cfg.smoothInertia.value)
 
 
 class GeneralPage(Page):

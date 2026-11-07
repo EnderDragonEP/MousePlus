@@ -26,7 +26,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 ### Smooth Scroll
 
 - 🧈 **Smooth steps** – Each wheel notch scrolls in small steps instead of one jump. Pick the animation time and scroll distance.
-- 🛝 **Inertia** – A fast flick keeps scrolling and slows down gradually. Turning the wheel back, clicking, Back/Forward or the bypass key stop it at once.
+- 🛝 **Inertia** – A fast flick keeps scrolling and slows down gradually. Set how strongly it glides (0.5×–3.0×) and how slowly it stops. A click, Back/Forward or the bypass key stop it at once. Turning the wheel back stops it too, and by default that notch only stops the glide instead of scrolling back (a setting).
 - ⌨️ **Bypass key** – Hold Alt (or the key you pick) for normal notched scrolling and your apps' own Alt + wheel shortcuts. Ctrl + wheel (zoom) always passes through untouched.
 - 🧪 **Overscroll bounce** – Experimental and off by default: the window springs back a little at the end of a page (see the limitations).
 

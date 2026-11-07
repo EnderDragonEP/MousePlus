@@ -47,6 +47,8 @@ class Config(QConfig):
     smoothDistance = RangeConfigItem("SmoothScroll", "Distance", 10, RangeValidator(5, 30))  # tenths
     smoothInertia = ConfigItem("SmoothScroll", "Inertia", True, BoolValidator())
     smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDES)))
+    smoothMomentum = RangeConfigItem("SmoothScroll", "InertiaMultiplier", 10, RangeValidator(5, 30))  # tenths
+    smoothBrake = ConfigItem("SmoothScroll", "ReverseStopsGlide", True, BoolValidator())
     bypassKey = OptionsConfigItem("SmoothScroll", "BypassKey", "alt", OptionsValidator(list(BYPASS_TEXTS)))
     smoothBounce = ConfigItem("SmoothScroll", "Bounce", False, BoolValidator())  # experimental
 
@@ -60,7 +62,7 @@ class Config(QConfig):
         """Every setting the mouse hook depends on."""
         return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
                 cls.disableInFullscreen, cls.smoothAnimation, cls.smoothDuration, cls.smoothDistance,
-                cls.smoothInertia, cls.smoothGlide, cls.bypassKey, cls.smoothBounce]
+                cls.smoothInertia, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.bypassKey, cls.smoothBounce]
 
 
 cfg = Config()
@@ -102,6 +104,8 @@ def smooth_settings():
         distance=distance,
         inertia=animate and cfg.smoothInertia.value,  # inertia continues the animation
         glide=GLIDES[cfg.smoothGlide.value],
+        momentum=cfg.smoothMomentum.value / 10,
+        brake=cfg.smoothBrake.value,
         bounce=bounce,
     )
 

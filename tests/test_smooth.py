@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from mouseplus.smooth import FRAME, GLIDES, SmoothScroller, SmoothSettings
@@ -107,6 +108,52 @@ class InertiaTest(unittest.TestCase):
         long_, _, _ = self.flick(SmoothSettings(glide=GLIDES["long"]))
         self.assertGreater(abs(sum(long_)), abs(sum(short)))
 
+    def glide_distance(self, momentum):
+        steps, _, _ = self.flick(SmoothSettings(momentum=momentum))
+        return abs(sum(steps)) - 5 * 120  # distance beyond the five notches themselves
+
+    def test_multiplier_scales_the_glide(self):
+        normal = self.glide_distance(1.0)
+        self.assertAlmostEqual(self.glide_distance(2.0) / normal, 2.0, delta=0.25)
+        self.assertAlmostEqual(self.glide_distance(0.5) / normal, 0.5, delta=0.15)
+        self.assertGreater(self.glide_distance(3.0), self.glide_distance(2.0))
+
+    def test_multiplier_eases_in_without_a_jerk(self):
+        s = SmoothScroller(SmoothSettings(momentum=3.0))
+        t = 0.0
+        for _ in range(5):
+            s.add(-120, t)
+            t += 0.02
+            s.frame(t)
+        while not s.gliding:
+            t += FRAME
+            s.frame(t)
+        speeds = [abs(s.velocity)]
+        self.assertEqual(speeds[0], abs(s.glide_base))  # starts at the flick's own speed
+        while s.gliding and len(speeds) < 20:
+            t += FRAME
+            s.frame(t)
+            speeds.append(abs(s.velocity))
+        changes = [b / a for a, b in zip(speeds, speeds[1:])]
+        self.assertLess(max(changes), 1.5)               # speeds up smoothly, never jumps
+        self.assertGreater(max(speeds), 2 * speeds[0])   # and does get the boost
+
+    def test_multiplier_of_one_glides_as_before(self):
+        s = SmoothScroller()
+        t = 0.0
+        for _ in range(5):
+            s.add(-120, t)
+            t += 0.02
+            s.frame(t)
+        while not s.gliding:
+            t += FRAME
+            s.frame(t)
+        start, base = t, abs(s.glide_base)
+        for _ in range(10):
+            t += FRAME
+            s.frame(t)
+        self.assertAlmostEqual(abs(s.velocity), base * math.exp(-(t - start) / GLIDES["medium"]), places=6)
+
     def test_inertia_off_means_no_glide(self):
         steps, _, _ = self.flick(SmoothSettings(inertia=False))
         self.assertEqual(sum(steps), -5 * 120)
@@ -118,11 +165,49 @@ class InertiaTest(unittest.TestCase):
             s.add(-120, t)
             t += 0.02
             s.frame(t)
+        self.assertFalse(s.gliding)    # still playing out the notches, not gliding yet
         s.add(120, t)                  # the other way
         self.assertEqual(s.direction, 1)
         steps, _ = play(s, t)
         self.assertEqual(sum(steps), 120)  # only the new notch plays out
         self.assertTrue(all(x >= 0 for x in steps))
+
+    def gliding(self, settings=SmoothSettings()):
+        """A scroller in the middle of a glide after a flick, and the current time."""
+        s = SmoothScroller(settings)
+        t = 0.0
+        for _ in range(5):
+            s.add(-120, t)
+            t += 0.02
+            s.frame(t)
+        while not s.gliding:
+            t += FRAME
+            s.frame(t)
+        for _ in range(10):
+            t += FRAME
+            s.frame(t)
+        return s, t
+
+    def test_reverse_wheel_during_a_glide_only_stops_it(self):
+        s, t = self.gliding()
+        s.add(120, t)
+        self.assertFalse(s.active)            # stopped dead...
+        self.assertEqual(play(s, t)[0], [])   # ...and nothing scrolls back
+        s.add(120, t + 0.1)                   # the next notch that way scrolls as usual
+        self.assertEqual(sum(play(s, t + 0.1)[0]), 120)
+
+    def test_reverse_wheel_during_a_glide_can_scroll_back(self):
+        s, t = self.gliding(SmoothSettings(brake=False))
+        s.add(120, t)
+        steps, _ = play(s, t)
+        self.assertEqual(sum(steps), 120)     # stops the glide and plays the notch out
+        self.assertTrue(all(x >= 0 for x in steps))
+
+    def test_same_direction_during_a_glide_keeps_going(self):
+        s, t = self.gliding()
+        s.add(-120, t)
+        self.assertTrue(s.active)
+        self.assertEqual(s.direction, -1)
 
     def test_stop(self):
         s = SmoothScroller()
