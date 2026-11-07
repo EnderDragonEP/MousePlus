@@ -44,8 +44,10 @@ EXCLUDES = [
 ]
 
 # Qt files a widgets-only English app never loads.
-# The update check uses HTTPS through Windows' own TLS (qschannelbackend), so the OpenSSL backend can go.
-DROP_FILES = {"opengl32sw.dll", "d3dcompiler_47.dll", "qt6pdf.dll", "qopensslbackend.dll", "qcertonlybackend.dll"}
+# The update check uses HTTPS through Windows' own TLS (qschannelbackend), so the OpenSSL backend can go,
+# and with it the OpenSSL DLLs PyInstaller's Qt hook collects from PATH (Git for Windows has them, for one).
+DROP_FILES = {"opengl32sw.dll", "d3dcompiler_47.dll", "qt6pdf.dll", "qopensslbackend.dll", "qcertonlybackend.dll",
+              "libcrypto-3-x64.dll", "libssl-3-x64.dll", "libcrypto-3.dll", "libssl-3.dll"}
 DROP_PLUGIN_DIRS = {"networkinformation"}
 DROP_IMAGE_PLUGINS = {"qgif", "qjpeg", "qtiff", "qwebp", "qicns", "qtga", "qwbmp", "qpdf"}
 
