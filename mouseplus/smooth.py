@@ -32,6 +32,7 @@ class SmoothSettings:
     distance: float = 1.0     # multiplier for each notch
     inertia: bool = True      # a fast flick keeps going
     glide: float = GLIDES["medium"]
+    bounce: bool = False      # experimental overscroll bounce (played by the hook, not here)
 
 
 class SmoothScroller:

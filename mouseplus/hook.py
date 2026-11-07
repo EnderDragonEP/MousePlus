@@ -10,7 +10,7 @@ from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from . import winapi as w
+from . import bounce, winapi as w
 from .cursor import Rect, map_crossing, monitor_at
 from .horizontal import Engine, Settings
 from .router import HORIZONTAL, SMOOTH, WheelEvent, route_wheel
@@ -23,6 +23,8 @@ _WATCHDOG_MS = 30_000      # periodic hook re-install
 _FULLSCREEN_TTL = 0.25     # seconds to cache the full-screen check
 _MASK_INTERVAL = 0.5       # seconds between mask-key taps while a bypass key is held
 _NOWHERE = Rect(0, 0, 0, 0)
+_EDGE_EVERY = 4            # frames between overscroll edge checks while a motion runs
+_EDGE_MIN = 30             # units of motion left that still make a bounce
 _BUTTON_DOWNS = {0x0201, 0x0204, 0x0207}  # left, right, middle: a click stops inertia
 
 
@@ -78,6 +80,9 @@ class MouseHook(QObject):
         self._mask_time = 0.0
         self._scroller = SmoothScroller()  # output thread only
         self._gesture = None          # (root window, modifiers) the animation started with
+        self._bounce = None           # the overscroll bounce playing, output thread only
+        self._bounce_at = None        # where the bounce last put the window
+        self._frames = 0
 
     @property
     def running(self) -> bool:
@@ -151,12 +156,17 @@ class MouseHook(QObject):
                         log.exception("Output action failed")
                 if scroller.active:
                     self._frame()
+                if self._bounce:
+                    self._bounce_frame()
                 self._smoothing = scroller.active
-                if scroller.active:
+                if scroller.active or self._bounce:
                     w.SetWaitableTimer(timer, ctypes.byref(due), 0, None, None, False)
         finally:
             scroller.stop()
             self._smoothing = False
+            if self._bounce:  # never leave a window offset
+                w.move_window(self._bounce.window, self._bounce.x, self._bounce.y)
+                self._bounce = None
             w.CloseHandle(timer)
 
     def _perform(self, action):
@@ -173,6 +183,8 @@ class MouseHook(QObject):
                 self._scroller.stop()  # another window or other keys: a new motion
             self._gesture = (root, modifiers)
             self._scroller.add(delta, now)
+            if self._scroller.settings.bounce:
+                self._check_edge()
         elif kind == "stop":
             self._scroller.stop()
         elif kind == "settings":
@@ -188,6 +200,42 @@ class MouseHook(QObject):
         step = self._scroller.frame(time.perf_counter())
         if step:
             w.send_wheel(step)
+        self._frames += 1
+        scroller = self._scroller
+        if (scroller.settings.bounce and scroller.active and self._frames % _EDGE_EVERY == 0
+                and (scroller.gliding or abs(scroller.remaining) >= _EDGE_MIN)):
+            self._check_edge()
+
+    def _check_edge(self):
+        """Overscroll bounce: if the page under the cursor can't scroll further in the
+        motion's direction, stop the motion and spring the window instead."""
+        direction = self._scroller.direction
+        target = w.classic_scrollbar_at(*w.cursor_pos())
+        if not direction or target is None or not bounce.at_edge(direction, *target[1:]):
+            return
+        self._scroller.stop()
+        if self._bounce:
+            return  # already bouncing
+        root = w.GetAncestor(target[0], w.GA_ROOT)
+        place = w.bounceable(root)
+        if place:
+            x, y, scale = place
+            self._bounce = bounce.Bounce(root, x, y, direction, bounce.AMPLITUDE * scale, time.perf_counter())
+            self._bounce_at = (x, y)
+
+    def _bounce_frame(self):
+        b = self._bounce
+        if w.window_position(b.window) != self._bounce_at:  # moved by someone else: leave it there
+            self._bounce = None
+            return
+        position = b.position(time.perf_counter())
+        if position is None:
+            w.move_window(b.window, b.x, b.y)  # exactly where it was
+            self._bounce = None
+            return
+        if position != self._bounce_at:
+            w.move_window(b.window, *position)
+            self._bounce_at = position
 
     # -- hook thread -----------------------------------------------------
 

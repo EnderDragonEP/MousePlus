@@ -28,7 +28,11 @@ INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN = 0x10, 0x11, 0x12, 0x5B, 0x5C
 VK_MASK = 0xE8  # unassigned: tapping it while Alt/Win is held keeps a menu from opening on release
-GA_ROOT = 2
+GA_PARENT, GA_ROOT = 1, 2
+WS_VSCROLL = 0x00200000
+SB_VERT = 1
+SIF_RANGE, SIF_PAGE, SIF_POS = 0x1, 0x2, 0x4
+SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_ASYNCWINDOWPOS = 0x1, 0x4, 0x10, 0x200, 0x4000
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 TOKEN_QUERY = 0x0008
 TOKEN_INTEGRITY_LEVEL = 25
@@ -91,6 +95,16 @@ class _INPUTUNION(ctypes.Union):
 class INPUT(ctypes.Structure):
     _anonymous_ = ("u",)
     _fields_ = [("type", wintypes.DWORD), ("u", _INPUTUNION)]
+
+
+class SCROLLINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT),
+                ("fMask", wintypes.UINT),
+                ("nMin", ctypes.c_int),
+                ("nMax", ctypes.c_int),
+                ("nPage", wintypes.UINT),
+                ("nPos", ctypes.c_int),
+                ("nTrackPos", ctypes.c_int)]
 
 
 class MONITORINFO(ctypes.Structure):
@@ -170,6 +184,12 @@ SetWaitableTimer = _fn(kernel32, "SetWaitableTimer", wintypes.BOOL, wintypes.HAN
                        ctypes.POINTER(ctypes.c_longlong), wintypes.LONG, ctypes.c_void_p, ctypes.c_void_p,
                        wintypes.BOOL)
 CancelWaitableTimer = _fn(kernel32, "CancelWaitableTimer", wintypes.BOOL, wintypes.HANDLE)
+GetScrollInfo = _fn(user32, "GetScrollInfo", wintypes.BOOL, wintypes.HWND, ctypes.c_int, ctypes.POINTER(SCROLLINFO))
+IsIconic = _fn(user32, "IsIconic", wintypes.BOOL, wintypes.HWND)
+IsWindowVisible = _fn(user32, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
+SetWindowPos = _fn(user32, "SetWindowPos", wintypes.BOOL, wintypes.HWND, wintypes.HWND,
+                   ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT)
+GetDpiForWindow = _fn(user32, "GetDpiForWindow", wintypes.UINT, wintypes.HWND)
 
 
 def _mouse_input(flags: int, data: int = 0) -> INPUT:
@@ -286,12 +306,56 @@ def monitor_rects() -> list:
     return rects
 
 
+def classic_scrollbar_at(x: int, y: int):
+    """The window under a point, or its nearest parent, that has a classic vertical scrollbar,
+    as (window, pos, min, max, page); None when there is none (most modern apps)."""
+    hwnd = WindowFromPoint(wintypes.POINT(x, y))
+    root = GetAncestor(hwnd, GA_ROOT) if hwnd else None
+    while hwnd:
+        if GetWindowLongW(hwnd, GWL_STYLE) & WS_VSCROLL:
+            info = SCROLLINFO(cbSize=ctypes.sizeof(SCROLLINFO), fMask=SIF_RANGE | SIF_PAGE | SIF_POS)
+            if GetScrollInfo(hwnd, SB_VERT, ctypes.byref(info)):
+                return hwnd, info.nPos, info.nMin, info.nMax, info.nPage
+        if hwnd == root:
+            break
+        hwnd = GetAncestor(hwnd, GA_PARENT)
+    return None
+
+
+def bounceable(root):
+    """(x, y, scale) of a top-level window that may be nudged, or None: it must be visible
+    and not minimized, maximized, full screen or elevated."""
+    if not root or not IsWindowVisible(root) or IsIconic(root) or IsZoomed(root):
+        return None
+    if is_fullscreen(root) or window_is_elevated(root):
+        return None
+    rect = wintypes.RECT()
+    if not GetWindowRect(root, ctypes.byref(rect)):
+        return None
+    return rect.left, rect.top, (GetDpiForWindow(root) or 96) / 96
+
+
+def window_position(hwnd):
+    rect = wintypes.RECT()
+    return (rect.left, rect.top) if GetWindowRect(hwnd, ctypes.byref(rect)) else None
+
+
+def move_window(hwnd, x: int, y: int):
+    """Move without resizing, activating or changing the z-order."""
+    SetWindowPos(hwnd, None, x, y, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS)
+
+
 _SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
 
 
 def foreground_is_fullscreen() -> bool:
     """True when the foreground window covers its whole monitor (games, F11, videos)."""
-    hwnd = GetForegroundWindow()
+    return is_fullscreen(GetForegroundWindow())
+
+
+def is_fullscreen(hwnd) -> bool:
+    """True when the window covers its whole monitor (games, F11, videos)."""
     if not hwnd:
         return False
     name = ctypes.create_unicode_buffer(64)

@@ -197,7 +197,14 @@ class SmoothPage(Page):
             texts=list(BYPASS_TEXTS.values()), parent=self.bypass)
         self.bypass.addSettingCard(self.bypassCard)
 
-        self.addWidgets(self.enableCard, self.scrolling, self.inertia, self.bypass)
+        self.experimental = Group("Experimental", self.view)
+        self.bounceCard = SwitchSettingCard(
+            FIF.ROTATE, "Overscroll bounce",
+            "Only in apps with classic scrollbars, and not in maximized windows",
+            cfg.smoothBounce, self.experimental)
+        self.experimental.addSettingCard(self.bounceCard)
+
+        self.addWidgets(self.enableCard, self.scrolling, self.inertia, self.bypass, self.experimental)
         self.setHint("The mouse wheel scrolls like a touchpad: smooth steps, and a fast flick keeps going. "
                      "Back/Forward + wheel still scrolls sideways, unsmoothed.")
         cfg.smoothAnimation.valueChanged.connect(self._updateCards)
@@ -267,7 +274,7 @@ class SettingsWindow(MSFluentWindow):
             # can arrive late and override a size set while the window is hidden.
             self._placed = True
             area = QGuiApplication.primaryScreen().availableGeometry()
-            self.resize(720, min(760, area.height() - 48))
+            self.resize(720, min(860, area.height() - 48))
             self.move(area.center() - self.rect().center())
         if self.isMinimized():
             self.showNormal()

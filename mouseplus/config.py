@@ -48,6 +48,7 @@ class Config(QConfig):
     smoothInertia = ConfigItem("SmoothScroll", "Inertia", True, BoolValidator())
     smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDES)))
     bypassKey = OptionsConfigItem("SmoothScroll", "BypassKey", "alt", OptionsValidator(list(BYPASS_TEXTS)))
+    smoothBounce = ConfigItem("SmoothScroll", "Bounce", False, BoolValidator())  # experimental
 
     @classmethod
     def featureItems(cls) -> list:
@@ -59,7 +60,7 @@ class Config(QConfig):
         """Every setting the mouse hook depends on."""
         return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
                 cls.disableInFullscreen, cls.smoothAnimation, cls.smoothDuration, cls.smoothDistance,
-                cls.smoothInertia, cls.smoothGlide, cls.bypassKey]
+                cls.smoothInertia, cls.smoothGlide, cls.bypassKey, cls.smoothBounce]
 
 
 cfg = Config()
@@ -91,9 +92,9 @@ def hook_settings() -> HookSettings:
 
 
 def smooth_settings():
-    """None when Smooth Scroll is off or would do nothing (no animation and 1.0x distance)."""
-    animate, distance = cfg.smoothAnimation.value, cfg.smoothDistance.value / 10
-    if not cfg.smoothEnabled.value or (not animate and distance == 1.0):
+    """None when Smooth Scroll is off or would do nothing (no animation, 1.0x distance, no bounce)."""
+    animate, distance, bounce = cfg.smoothAnimation.value, cfg.smoothDistance.value / 10, cfg.smoothBounce.value
+    if not cfg.smoothEnabled.value or (not animate and distance == 1.0 and not bounce):
         return None
     return SmoothSettings(
         animate=animate,
@@ -101,6 +102,7 @@ def smooth_settings():
         distance=distance,
         inertia=animate and cfg.smoothInertia.value,  # inertia continues the animation
         glide=GLIDES[cfg.smoothGlide.value],
+        bounce=bounce,
     )
 
 
