@@ -275,6 +275,7 @@ class GeneralPage(Page):
 
 class SettingsWindow(MSFluentWindow):
     hiddenToTray = pyqtSignal()
+    updateFound = pyqtSignal(object)  # Release: "Check for updates" found a newer version
 
     def __init__(self):
         super().__init__()
@@ -342,6 +343,7 @@ class SettingsWindow(MSFluentWindow):
                             orient=Qt.Orientation.Horizontal, isClosable=True,
                             position=InfoBarPosition.TOP, duration=3000, parent=self)
             return
+        self.updateFound.emit(release)
         box = MessageBox(f"Version {release.version} is available",
                          f"You have version {__version__}. Open the download page on GitHub?", self)
         box.yesButton.setText("Download")

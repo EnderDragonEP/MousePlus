@@ -35,7 +35,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 ### Everywhere
 
 - 🎮 **Game friendly** – Every feature steps aside in full-screen games, videos and F11 browsers.
-- ⏸️ **One pause** – Right-click the tray icon to pause every feature at once.
+- ⏸️ **Quick tray menu** – Right-click the tray icon to pause every feature at once, turn single features on or off, or download an update once one is out.
 - 🚀 **Start with Windows** – An optional toggle, so it's always ready.
 - 📌 **Lives in the tray** – Closing the window keeps it running.
 - 🎨 **Feels like a native app** – Fluent Design with Mica, light/dark mode and your accent color, updated live.

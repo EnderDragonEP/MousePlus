@@ -114,6 +114,7 @@ class App(QObject):
         self.tray.settingsRequested.connect(self.window.present)
         self.tray.updateCheckRequested.connect(self._checkForUpdates)
         self.startupCheck.available.connect(self._onUpdateAvailable)
+        self.window.updateFound.connect(self.tray.setUpdate)
         self.tray.pauseRequested.connect(self._togglePause)
         self.tray.exitRequested.connect(qapp.quit)
         self.hook.latchedChanged.connect(self._onLatched)
@@ -169,6 +170,7 @@ class App(QObject):
 
     def _onUpdateAvailable(self, release):
         """The startup check found a newer version: say so in the window if it's open, else with a notification."""
+        self.tray.setUpdate(release)
         if self.window.isVisible() and not self.window.isMinimized():
             self.window.showUpdateAvailable(release)
         else:

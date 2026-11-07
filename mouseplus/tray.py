@@ -1,14 +1,15 @@
-"""Notification-area icon with a Fluent menu: a status header, quick actions and app commands."""
+"""Notification-area icon with a Fluent menu: a status header, pause, a switch per feature and app commands."""
 from PyQt6.QtCore import QSize, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import QSystemTrayIcon, QVBoxLayout, QWidget
-from qfluentwidgets import (Action, BodyLabel, CaptionLabel, FluentIcon as FIF, StrongBodyLabel, SystemTrayMenu,
-                            qconfig, setFont, themeColor)
+from qfluentwidgets import (Action, BodyLabel, CaptionLabel, CheckableSystemTrayMenu, FluentIcon as FIF,
+                            StrongBodyLabel, qconfig, setFont, themeColor)
 
-from . import APP_NAME, icons
+from . import APP_NAME, __version__, icons
 from .config import TRIGGER_TEXTS, cfg
 
 _SECONDARY = (QColor(96, 96, 96), QColor(206, 206, 206))  # light, dark
+_CHECK_COLUMN = 26  # a checkable menu insets every item this much to make room for the check marks
 
 
 def active_features() -> list:
@@ -20,7 +21,7 @@ def active_features() -> list:
 
 
 class StatusHeader(QWidget):
-    """Three lines at the top of the menu: state, how to use it right now, and the features that are on."""
+    """The top of the menu: the state, a hint when the state needs one, and the version."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -38,6 +39,7 @@ class StatusHeader(QWidget):
     def setStatus(self, title: str, detail: str, caption: str, active: bool):
         self.title.setText(title)
         self.detail.setText(detail)
+        self.detail.setVisible(bool(detail))
         if active:
             self.detail.setTextColor(themeColor(), themeColor())
         else:
@@ -55,21 +57,25 @@ class Tray(QSystemTrayIcon):
         super().__init__(parent)
         self._latched = False
         self._paused = False
+        self._release = None     # a newer version found by an update check
         self._messageUrl = None  # opened when the latest notification is selected
 
         self.header = StatusHeader()
         self.pauseAction = Action(FIF.PAUSE, "Pause Mouse Plus", triggered=lambda: self.pauseRequested.emit())
-        self.modeAction = Action(FIF.PIN, "Switch to toggle mode",
-                                 triggered=lambda: qconfig.set(cfg.toggleMode, not cfg.toggleMode.value))
+        # Each feature's on/off switch, the same setting as the first card on its tab.
+        self.featureActions = [self._switch(cfg.horizontalEnabled, icons.glyph_icon(), "Horizontal Scroll"),
+                               self._switch(cfg.cursorEnabled, icons.monitors_icon(), "Monitor Cursor"),
+                               self._switch(cfg.smoothEnabled, FIF.SCROLL, "Smooth Scroll")]
         self.settingsAction = Action(FIF.SETTING, "Settings", triggered=lambda: self.settingsRequested.emit())
-        self.updateAction = Action(FIF.UPDATE, "Check for updates",
-                                   triggered=lambda: self.updateCheckRequested.emit())
+        self.updateAction = Action(FIF.UPDATE, "Check for updates", triggered=self._onUpdateAction)
         self.quitAction = Action(FIF.POWER_BUTTON, "Quit", triggered=lambda: self.exitRequested.emit())
 
-        self.menu = SystemTrayMenu()
+        self.menu = CheckableSystemTrayMenu()
         self.menu.addWidget(self.header, selectable=False)
         self.menu.addSeparator()
-        self.menu.addActions([self.pauseAction, self.modeAction])
+        self.menu.addAction(self.pauseAction)
+        self.menu.addSeparator()
+        self.menu.addActions([action for _, action in self.featureActions])
         self.menu.addSeparator()
         self.menu.addActions([self.settingsAction, self.updateAction])
         self.menu.addSeparator()
@@ -78,9 +84,14 @@ class Tray(QSystemTrayIcon):
 
         self.activated.connect(self._onActivated)
         self.messageClicked.connect(self._onMessageClicked)
-        for item in (*cfg.featureItems(), cfg.toggleMode, cfg.trigger):
+        for item in (*cfg.featureItems(), cfg.trigger):
             item.valueChanged.connect(self.refresh)
         self.refresh()
+
+    def _switch(self, item, icon, text: str):
+        action = Action(icon, text, checkable=True)
+        action.triggered.connect(lambda checked: qconfig.set(item, checked))
+        return item, action
 
     def notify(self, title: str, text: str, icon=None, msecs: int = 5000, url: str = None):
         """Show a Windows notification (the app icon unless `icon` is given); selecting it opens `url`."""
@@ -95,40 +106,42 @@ class Tray(QSystemTrayIcon):
         self._paused = on
         self.refresh()
 
+    def setUpdate(self, release):
+        """A newer version is out: the menu offers to download it."""
+        self._release = release
+        self.refresh()
+
     def refresh(self, *_):
-        features = active_features()
-        horizontal, toggle = cfg.horizontalEnabled.value, cfg.toggleMode.value
-        trigger = TRIGGER_TEXTS[cfg.trigger.value]
+        state, tip, title, detail = "on", "On", "Mouse Plus is on", ""  # no hint needed
         if self._paused:
             state, tip, title, detail = "off", "Paused", "Mouse Plus is paused", "Resume to turn features back on"
-        elif not features:
-            state, tip, title, detail = "off", "No features on", "No features are on", "Turn one on in Settings"
-        elif self._latched:
+        elif not active_features():
+            state, tip, title, detail = "off", "No features on", "No features are on", "Turn one on below"
+        elif self._latched:  # toggle mode locked horizontal scrolling on: say why the wheel scrolls sideways
             state, tip = "latched", "Horizontal scrolling locked on"
-            title, detail = "Horizontal scrolling locked on", f"Click {trigger} to release"
-        elif horizontal and toggle:
-            state, tip, title, detail = "on", "On", "Mouse Plus is on", f"Click {trigger} to lock"
-        elif horizontal:
-            state, tip, title, detail = "on", "On", "Mouse Plus is on", f"Hold {trigger} + wheel"
+            title, detail = "Horizontal scrolling locked on", f"Click {TRIGGER_TEXTS[cfg.trigger.value]} to release"
+        if self._release:
+            caption = f"Version {self._release.version} is available"
         else:
-            state, tip, title, detail = "on", "On", "Mouse Plus is on", features[0]
-        active = state != "off"
+            caption = f"Version {__version__}"
 
         self.setIcon(icons.tray_icon(state))
         self.setToolTip(f"{APP_NAME} – {tip}")
-        self.header.setStatus(title, detail, " · ".join(features) or "Every feature is off", active)
+        self.header.setStatus(title, detail, caption, state != "off")
         self._fitHeader()
         self.pauseAction.setText("Resume Mouse Plus" if self._paused else "Pause Mouse Plus")
         self.pauseAction.setIcon(FIF.PLAY if self._paused else FIF.PAUSE)
-        self.modeAction.setText("Switch to hold mode" if toggle else "Switch to toggle mode")
-        self.modeAction.setIcon(FIF.UNPIN if toggle else FIF.PIN)
-        self.modeAction.setEnabled(horizontal and not self._paused)  # the menu can't hide items
+        for item, action in self.featureActions:
+            action.setChecked(item.value)
+        if self._release:
+            self.updateAction.setText(f"Download version {self._release.version}")
+            self.updateAction.setIcon(FIF.DOWNLOAD)
 
     def _fitHeader(self):
         """The header is the menu's first item; resize that item when the text changes."""
         view = self.menu.view
-        # The menu style insets every item by 6 px margin + 10 px padding on each side.
-        view.item(0).setSizeHint(self.header.sizeHint() + QSize(32, 0))
+        # The menu style insets every item by 6 px margin + 10 px padding on each side, plus the check column.
+        view.item(0).setSizeHint(self.header.sizeHint() + QSize(32 + _CHECK_COLUMN, 0))
         # Separators keep the menu width from when they were added, which would stop
         # the menu from shrinking; give them no width of their own so they follow it.
         for i in range(1, view.count()):
@@ -142,6 +155,12 @@ class Tray(QSystemTrayIcon):
     def _onActivated(self, reason):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.settingsRequested.emit()
+
+    def _onUpdateAction(self):
+        if self._release:
+            QDesktopServices.openUrl(QUrl(self._release.url))
+        else:
+            self.updateCheckRequested.emit()
 
     def _onMessageClicked(self):
         if self._messageUrl:
