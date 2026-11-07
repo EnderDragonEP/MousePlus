@@ -14,6 +14,7 @@ from .monitormap import MonitorMap
 from .updates import UpdateChecker, is_newer
 
 LICENSES_URL = f"{REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md"
+CHANGELOG_URL = f"{REPO_URL}/blob/main/CHANGELOG.md"
 
 
 class Group(SettingCardGroup):
@@ -64,10 +65,11 @@ class NotchesCard(SliderCard):
 
 
 class AboutCard(PrimaryPushSettingCard):
-    """App name, then the version with "View source" and "Licenses" links, plus the update button."""
+    """App name, then the version with "Changelog", "View source" and "Licenses" links, plus the update button."""
 
     def __init__(self, parent=None):
         super().__init__("Check for updates", icons.app_icon(), APP_NAME, f"Version {__version__}", parent)
+        self.changelogLink = self._link(CHANGELOG_URL, "Changelog")
         self.sourceLink = self._link(REPO_URL, "View source")
         self.licensesLink = self._link(LICENSES_URL, "Licenses")
         # Put the links on the version line, after the card's description: "Version · link · link".
@@ -75,7 +77,7 @@ class AboutCard(PrimaryPushSettingCard):
         row.setSpacing(6)
         self.vBoxLayout.removeWidget(self.contentLabel)
         row.addWidget(self.contentLabel, 0, Qt.AlignmentFlag.AlignVCenter)
-        for link in (self.sourceLink, self.licensesLink):
+        for link in (self.changelogLink, self.sourceLink, self.licensesLink):
             dot = QLabel("·", self)
             dot.setObjectName("contentLabel")  # styled like the version text
             row.addWidget(dot, 0, Qt.AlignmentFlag.AlignVCenter)
