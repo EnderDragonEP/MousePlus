@@ -1,4 +1,4 @@
-"""Which feature handles a wheel event: Horizontal Scroll, Smooth Scroll or neither (pass through).
+"""Which feature handles a wheel event: Horizontal Scroll, Scroll Inertia or neither (pass through).
 
 Pure Python so the precedence can be unit-tested. Checks that need Win32 (full-screen
 app in front, the app or elevated window under the cursor) are passed in as callables
@@ -24,7 +24,7 @@ class WheelEvent:
     delta: int
     horizontal: bool       # Back/Forward held, or toggle mode latched on
     modifiers: frozenset   # held keys: "alt", "ctrl", "shift", "win"
-    smooth: bool           # Smooth Scroll is on (and has something to do)
+    smooth: bool           # Scroll Inertia is on
     bypass: frozenset      # keys that make the wheel pass through; empty for none
 
 
@@ -35,13 +35,13 @@ def route_wheel(event: WheelEvent, fullscreen: Callable[[], bool], elevated: Cal
     0. No delta at all (some drivers send these): pass untouched, without stopping anything.
     1. Back/Forward + wheel, or a latched toggle: Horizontal Scroll, unchanged.
     2. Full-screen app in front: pass.
-    3. Bypass keys held: pass untouched (normal notches, the app's own Alt+wheel and so on).
-    4. Ctrl held: pass. Zoom is step-based; smoothing or inertia would overshoot.
-    5. Smooth Scroll off, a finer-than-notch delta (hi-res wheel, touchpad), an app on the
-       list or the taskbar under the cursor (e.g. an image viewer that flips an image per
-       wheel message) or an elevated window there (Windows blocks injected input): pass,
+    3. Bypass keys held: pass untouched (no glide, the app's own Alt+wheel and so on).
+    4. Ctrl held: pass. Zoom is step-based; a glide would overshoot.
+    5. Scroll Inertia off, a finer-than-notch delta (hi-res wheel, touchpad), an app on the
+       list or the taskbar under the cursor (e.g. an image viewer, where a glide would keep
+       flipping images) or an elevated window there (Windows blocks injected input): pass,
        and stop any glide, since the user now scrolls some other way.
-    6. Otherwise Smooth Scroll.
+    6. Otherwise Scroll Inertia.
     """
     if not event.delta:
         return Decision(PASS)

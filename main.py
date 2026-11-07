@@ -1,4 +1,4 @@
-"""Mouse Plus - horizontal scrolling, proportional cursor movement between monitors and smooth scrolling.
+"""Mouse Plus - horizontal scrolling, proportional cursor movement between monitors and scroll inertia.
 
 Usage: main.py [--tray]   (--tray starts hidden in the notification area)
 """

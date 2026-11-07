@@ -1,4 +1,4 @@
-"""Mouse Plus - horizontal scrolling, proportional cursor movement between monitors and smooth scrolling."""
+"""Mouse Plus - horizontal scrolling, proportional cursor movement between monitors and scroll inertia."""
 import os
 from pathlib import Path
 

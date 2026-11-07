@@ -1,4 +1,4 @@
-"""The Smooth tab's list of apps that scroll normally, and the dialog that adds one."""
+"""The Inertia tab's list of apps that scroll normally, and the dialog that adds one."""
 import os
 
 from PyQt6.QtCore import QFileInfo, QSize, Qt, pyqtSignal

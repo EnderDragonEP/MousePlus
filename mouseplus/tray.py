@@ -23,7 +23,7 @@ def active_features() -> list:
     """Names of the features that are switched on."""
     features = [("Horizontal Scroll", cfg.horizontalEnabled.value),
                 ("Monitor Cursor", cfg.cursorEnabled.value),
-                ("Smooth Scroll", cfg.smoothEnabled.value)]
+                ("Scroll Inertia", cfg.smoothEnabled.value)]
     return [name for name, on in features if on]
 
 
@@ -72,7 +72,7 @@ class Tray(QSystemTrayIcon):
         # Each feature's on/off switch, the same setting as the first card on its tab.
         self.featureActions = [self._switch(cfg.horizontalEnabled, icons.glyph_icon(), "Horizontal Scroll"),
                                self._switch(cfg.cursorEnabled, icons.monitors_icon(), "Monitor Cursor"),
-                               self._switch(cfg.smoothEnabled, FIF.SCROLL, "Smooth Scroll")]
+                               self._switch(cfg.smoothEnabled, FIF.SCROLL, "Scroll Inertia")]
         self.settingsAction = Action(FIF.SETTING, "Settings", triggered=lambda: self.settingsRequested.emit())
         self.updateAction = Action(FIF.UPDATE, "Check for updates", triggered=self._onUpdateAction)
         self.quitAction = Action(FIF.POWER_BUTTON, "Quit", triggered=lambda: self.exitRequested.emit())

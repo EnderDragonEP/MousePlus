@@ -1,7 +1,38 @@
 import unittest
 
-from mouseplus.config import (IMAGE_VIEWERS, ProgramListValidator, ProgramNamesValidator, cfg, program_label,
-                              program_names)
+from mouseplus.config import (IMAGE_VIEWERS, ProgramListValidator, ProgramNamesValidator, cfg, hook_settings,
+                              program_label, program_names, smooth_settings)
+from mouseplus.smooth import GLIDES
+
+
+class SmoothSettingsTest(unittest.TestCase):
+    def set(self, **values):
+        for name, value in values.items():
+            item = getattr(cfg, name)
+            self.addCleanup(setattr, item, "value", item.value)
+            item.value = value
+
+    def test_free_spin_and_the_flick_threshold(self):
+        self.set(smoothEnabled=True, smoothGlide="free", smoothFlick=2)
+        s = smooth_settings()
+        self.assertEqual((s.free_spin, s.flick), (True, 2))
+        self.set(smoothGlide="long")
+        self.assertEqual((smooth_settings().free_spin, smooth_settings().glide), (False, GLIDES["long"]))
+
+    def test_sideways_gets_inertia_with_smooth_scroll_unless_turned_off(self):
+        self.set(smoothEnabled=True)
+        self.assertTrue(hook_settings().smooth_sideways)  # on by default
+        self.set(smoothSideways=False)
+        self.assertFalse(hook_settings().smooth_sideways)
+        self.set(smoothSideways=True, smoothEnabled=False)
+        self.assertFalse(hook_settings().smooth_sideways)
+
+    def test_off_means_the_wheel_isnt_touched(self):
+        self.set(smoothEnabled=False)
+        self.assertIsNone(smooth_settings())
+        self.assertIsNone(hook_settings().smooth)
+        self.set(smoothEnabled=True, smoothBounce=True)
+        self.assertTrue(smooth_settings().bounce)
 
 
 class ProgramListTest(unittest.TestCase):

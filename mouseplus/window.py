@@ -9,7 +9,7 @@ from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, Fluent
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
 from .applist import AppListCard
-from .config import BYPASS_TEXTS, DURATION_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
+from .config import BYPASS_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
 from .monitormap import MonitorMap
 from .updates import UpdateChecker, is_newer
 
@@ -29,8 +29,8 @@ class Group(SettingCardGroup):
         return self.resize(self.width(), h)
 
 
-class MultiplierCard(RangeSettingCard):
-    """Slider card that shows a value stored in tenths as a multiplier ("1.0×")."""
+class SliderCard(RangeSettingCard):
+    """Slider card that shows its value as `valueText()` says."""
 
     def __init__(self, configItem, icon, title, content, parent=None):
         super().__init__(configItem, icon, title, content, parent)
@@ -41,9 +41,26 @@ class MultiplierCard(RangeSettingCard):
         super().setValue(value)
         self._show(value)
 
+    def valueText(self, value) -> str:
+        return str(value)
+
     def _show(self, value):
-        self.valueLabel.setText(f"{value / 10:.1f}×")
+        self.valueLabel.setText(self.valueText(value))
         self.valueLabel.adjustSize()
+
+
+class MultiplierCard(SliderCard):
+    """A value stored in tenths, shown as a multiplier ("1.0×")."""
+
+    def valueText(self, value) -> str:
+        return f"{value / 10:.1f}×"
+
+
+class NotchesCard(SliderCard):
+    """A number of wheel notches ("3 notches")."""
+
+    def valueText(self, value) -> str:
+        return f"{value} notches"
 
 
 class AboutCard(PrimaryPushSettingCard):
@@ -183,29 +200,17 @@ class CursorPage(Page):
 
 class SmoothPage(Page):
     def __init__(self, parent=None):
-        super().__init__("smoothPage", "Smooth Scroll", parent)
-        self.enableCard = SwitchSettingCard(
-            FIF.SCROLL, "Smooth Scroll", "Turn this feature on or off", cfg.smoothEnabled, self.view)
-
-        self.scrolling = Group("Scrolling", self.view)
-        self.animationCard = SwitchSettingCard(
-            FIF.SPEED_MEDIUM, "Smooth scrolling", "Each wheel notch scrolls in small steps instead of one jump",
-            cfg.smoothAnimation, self.scrolling)
-        self.durationCard = ComboBoxSettingCard(
-            cfg.smoothDuration, FIF.STOP_WATCH, "Animation time", "How long each notch takes to play out",
-            texts=list(DURATION_TEXTS.values()), parent=self.scrolling)
-        self.distanceCard = MultiplierCard(cfg.smoothDistance, FIF.SPEED_HIGH, "Scroll distance",
-                                           "Distance per wheel notch", self.scrolling)
-        self.scrolling.addSettingCards([self.animationCard, self.durationCard, self.distanceCard])
-
+        super().__init__("smoothPage", "Scroll Inertia", parent)
         self.inertia = Group("Inertia", self.view)
-        self.inertiaCard = SwitchSettingCard(
-            FIF.SEND, "Inertia", "A fast flick keeps scrolling and slows down gradually, like a touchpad",
-            cfg.smoothInertia, self.inertia)
+        self.enableCard = SwitchSettingCard(  # the feature's on/off switch: inertia is all it does
+            FIF.SEND, "Inertia", "A fast flick keeps scrolling and slows down, like a free-spinning wheel",
+            cfg.smoothEnabled, self.inertia)
+        self.flickCard = NotchesCard(cfg.smoothFlick, FIF.FINGERPRINT, "Flick threshold",
+                                     "How many quick notches start a glide", self.inertia)
         self.momentumCard = MultiplierCard(cfg.smoothMomentum, FIF.ZOOM_IN, "Inertia multiplier",
                                            "How fast a flick keeps going, and so how far", self.inertia)
         self.glideCard = ComboBoxSettingCard(
-            cfg.smoothGlide, FIF.SPEED_OFF, "Glide", "How slowly a flick comes to a stop",
+            cfg.smoothGlide, FIF.SPEED_OFF, "Glide", "How slowly a flick stops. Free spin coasts like a free wheel",
             texts=list(GLIDE_TEXTS.values()), parent=self.inertia)
         self.brakeCard = SwitchSettingCard(
             FIF.PAUSE, "Reverse wheel stops the glide",
@@ -215,17 +220,20 @@ class SmoothPage(Page):
             FIF.SHARE, "Carry the glide to other apps",
             "A glide keeps going when the cursor moves to another window",
             cfg.smoothCarry, self.inertia)
-        self.inertia.addSettingCards([self.inertiaCard, self.momentumCard, self.glideCard, self.brakeCard,
-                                      self.carryCard])
+        self.sidewaysCard = SwitchSettingCard(
+            icons.glyph_icon(), "Sideways too", "Back/Forward + wheel keeps going after a flick too",
+            cfg.smoothSideways, self.inertia)
+        self.inertia.addSettingCards([self.enableCard, self.flickCard, self.momentumCard, self.glideCard,
+                                      self.brakeCard, self.carryCard, self.sidewaysCard])
 
         self.bypass = Group("Bypass", self.view)
         self.bypassCard = ComboBoxSettingCard(
             cfg.bypassKey, FIF.CANCEL, "Bypass key",
-            "Hold it for normal notched scrolling. Ctrl + wheel (zoom) always passes through.",
+            "Hold it to scroll without inertia. Ctrl + wheel (zoom) always passes through.",
             texts=list(BYPASS_TEXTS.values()), parent=self.bypass)
         self.appsCard = AppListCard(
             cfg.smoothExcluded, cfg.smoothAppNames, FIF.APPLICATION, "Apps that scroll normally",
-            "For apps that react to every wheel step, like image viewers", self.bypass)
+            "For apps where a glide gets in the way, like image viewers", self.bypass)
         self.bypass.addSettingCards([self.bypassCard, self.appsCard])
 
         self.experimental = Group("Experimental", self.view)
@@ -235,19 +243,8 @@ class SmoothPage(Page):
             cfg.smoothBounce, self.experimental)
         self.experimental.addSettingCard(self.bounceCard)
 
-        self.addWidgets(self.enableCard, self.scrolling, self.inertia, self.bypass, self.experimental)
-        self.setHint("The mouse wheel scrolls like a touchpad: smooth steps, and a fast flick keeps going. "
-                     "Back/Forward + wheel still scrolls sideways, unsmoothed.")
-        cfg.smoothAnimation.valueChanged.connect(self._updateCards)
-        cfg.smoothInertia.valueChanged.connect(self._updateCards)
-        self._updateCards()
-
-    def _updateCards(self, *_):
-        animate = cfg.smoothAnimation.value
-        self.durationCard.setEnabled(animate)
-        self.inertiaCard.setEnabled(animate)  # inertia continues the animation
-        for card in (self.momentumCard, self.glideCard, self.brakeCard, self.carryCard):
-            card.setEnabled(animate and cfg.smoothInertia.value)
+        self.addWidgets(self.inertia, self.bypass, self.experimental)
+        self.setHint("Each notch scrolls as usual, and a fast flick keeps going like a free-spinning wheel.")
 
 
 class GeneralPage(Page):
@@ -290,7 +287,7 @@ class SettingsWindow(MSFluentWindow):
                              selectedIcon=icons.glyph_icon(accent=True))
         self.addSubInterface(self.cursorPage, icons.monitors_icon(), "Cursor",
                              selectedIcon=icons.monitors_icon(accent=True))
-        self.addSubInterface(self.smoothPage, FIF.SCROLL, "Smooth")
+        self.addSubInterface(self.smoothPage, FIF.SCROLL, "Inertia")
         self.addSubInterface(self.generalPage, FIF.SETTING, "General", position=NavigationItemPosition.BOTTOM)
 
         self.setMinimumWidth(600)

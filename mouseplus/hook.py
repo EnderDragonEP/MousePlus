@@ -5,7 +5,7 @@ import queue
 import threading
 import time
 from ctypes import wintypes
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -30,8 +30,8 @@ _TASKBAR = "<taskbar>"     # the "program" of taskbar windows in the program cac
 
 
 def _program_of(hwnd) -> str:
-    """The program file of a window, or _TASKBAR for the taskbar: Smooth Scroll stays out of it like
-    an app on the list, since nothing there scrolls and the volume icon may react to every small step."""
+    """The program file of a window, or _TASKBAR for the taskbar: Scroll Inertia stays out of it like
+    an app on the list, since nothing there scrolls and a glide over the volume icon would keep changing the volume."""
     if not hwnd:
         return ""
     root = w.GetAncestor(hwnd, w.GA_ROOT)
@@ -44,9 +44,10 @@ def _program_of(hwnd) -> str:
 class HookSettings:
     horizontal: Settings = field(default_factory=Settings)
     cursor: bool = False                     # Monitor Cursor: proportional moves between monitors
-    smooth: Optional[SmoothSettings] = None  # Smooth Scroll; None when off
+    smooth: Optional[SmoothSettings] = None  # Scroll Inertia; None when off
+    smooth_sideways: bool = False            # Back/Forward + wheel gets inertia too
     bypass: frozenset = frozenset({"alt"})   # keys that make the wheel pass through untouched
-    excluded: frozenset = frozenset()        # programs Smooth Scroll stays out of ("xnviewmp.exe")
+    excluded: frozenset = frozenset()        # programs Scroll Inertia stays out of ("xnviewmp.exe")
     skip_fullscreen: bool = True             # every feature stays out of full-screen apps
 
 
@@ -56,10 +57,10 @@ class MouseHook(QObject):
     Two threads:
     - the hook thread runs a plain Win32 message loop and answers hook calls;
       the features' decision state is only touched there, settings are posted to it.
-    - the output thread calls SendInput and plays out smooth scrolling. SendInput
-      waits until every low-level hook (ours included) has seen the injected event,
+    - the output thread calls SendInput and plays out Scroll Inertia's notches and glides.
+      SendInput waits until every low-level hook (ours included) has seen the injected event,
       so calling it on the hook thread would stall input until Windows times us out.
-      It sleeps on an event when idle and wakes on a high-resolution timer while animating.
+      It sleeps on an event when idle and wakes on a high-resolution timer while scrolling.
     """
 
     latchedChanged = pyqtSignal(bool)
@@ -87,13 +88,15 @@ class MouseHook(QObject):
         self._cursor_active = False   # feature on and more than one monitor
         self._pos = wintypes.POINT()  # reused for GetCursorPos on every move
         self._pos_ref = ctypes.byref(self._pos)
-        # Smooth Scroll state
-        self._smoothing = False       # set by the output thread while it animates
+        # Scroll Inertia state
+        self._smoothing = False       # set by the output thread while Scroll Inertia is in motion
         self._elevation = {}          # root window -> elevated, hook thread only
         self._programs = {}           # window -> program file name, hook thread only
         self._mask_time = 0.0
         self._scroller = SmoothScroller()  # output thread only
-        self._gesture = None          # (root window, modifiers) the animation started with
+        self._gesture = None          # (root window, modifiers) the motion started with
+        self._hscroller = SmoothScroller()  # the same for sideways scrolling (Back/Forward + wheel)
+        self._hgesture = None
         self._bounce = None           # the overscroll bounce playing, output thread only
         self._bounce_at = None        # where the bounce last put the window
         self._bounce_trail = set()    # every spot the bounce asked for; moves land asynchronously
@@ -153,8 +156,9 @@ class MouseHook(QObject):
         timer = w.CreateWaitableTimerExW(None, None, w.CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, w.TIMER_ALL_ACCESS)
         handles = (wintypes.HANDLE * 2)(self._wake, timer)
         due = ctypes.c_longlong(-round(FRAME * 10_000_000))  # relative, in 100 ns units
-        scroller = self._scroller
-        scroller.stop()
+        scrollers = (self._scroller, self._hscroller)
+        for scroller in scrollers:
+            scroller.stop()
         try:
             while True:
                 w.WaitForMultipleObjects(2, handles, False, w.INFINITE)
@@ -169,15 +173,17 @@ class MouseHook(QObject):
                         self._perform(action)
                     except Exception:
                         log.exception("Output action failed")
-                if scroller.active:
+                moving = any(scroller.active for scroller in scrollers)
+                if moving:
                     self._frame()
                 if self._bounce:
                     self._bounce_frame()
-                self._smoothing = scroller.active
-                if scroller.active or self._bounce:
+                self._smoothing = moving = any(scroller.active for scroller in scrollers)
+                if moving or self._bounce:
                     w.SetWaitableTimer(timer, ctypes.byref(due), 0, None, None, False)
         finally:
-            scroller.stop()
+            for scroller in scrollers:
+                scroller.stop()
             self._smoothing = False
             if self._bounce:  # never leave a window offset
                 w.move_window(self._bounce.window, self._bounce.x, self._bounce.y)
@@ -186,44 +192,63 @@ class MouseHook(QObject):
 
     def _perform(self, action):
         kind = action[0]
-        if kind == "hwheel":
+        if kind == "hwheel":  # a sideways step as it is: any smooth motion gives way
+            self._scroller.stop()
+            self._hscroller.stop()
             w.send_hwheel(action[1])
         elif kind == "click":
             w.send_xclick(action[1])
         elif kind == "mask":
             w.send_mask_key()
         elif kind == "smooth":
-            _, delta, now, root, modifiers = action
-            gesture, carry = self._gesture, self._scroller.settings.carry
-            if self._scroller.active and gesture != (root, modifiers) and not (carry and gesture[1] == modifiers):
-                self._scroller.stop()  # other keys, or another window the glide may not carry into: a new motion
-            self._gesture = (root, modifiers)
-            self._scroller.add(delta, now)
+            self._hscroller.stop()  # scrolling the other way round is a new motion
+            self._gesture = self._add(self._scroller, self._gesture, action)
             if self._scroller.settings.bounce:
                 self._check_edge()
+        elif kind == "hsmooth":
+            self._scroller.stop()
+            self._hgesture = self._add(self._hscroller, self._hgesture, action)
         elif kind == "stop":
             self._scroller.stop()
+            self._hscroller.stop()
         elif kind == "settings":
             self._scroller.settings = action[1]
+            self._hscroller.settings = replace(action[1], bounce=False)  # the bounce is vertical only
+
+    def _add(self, scroller: SmoothScroller, gesture, action):
+        """Give one direction's scroller a notch; returns that direction's new gesture."""
+        _, delta, now, root, modifiers = action
+        carry = scroller.settings.carry
+        if scroller.active and gesture != (root, modifiers) and not (carry and gesture[1] == modifiers):
+            scroller.stop()  # other keys, or another window the glide may not carry into: a new motion
+        scroller.add(delta, now)
+        return root, modifiers
 
     def _frame(self):
-        root, modifiers = self._gesture
+        scroller = self._scroller
+        if scroller.active:
+            self._gesture = self._frame_axis(scroller, self._gesture, w.send_wheel)
+            self._frames += 1
+            if (scroller.settings.bounce and scroller.active and self._frames % _EDGE_EVERY == 0
+                    and (scroller.gliding or abs(scroller.remaining) >= _EDGE_MIN)):
+                self._check_edge()
+        if self._hscroller.active:
+            self._hgesture = self._frame_axis(self._hscroller, self._hgesture, w.send_hwheel)
+
+    def _frame_axis(self, scroller: SmoothScroller, gesture, send):
+        """One frame of one direction's motion; returns its gesture (the window it now scrolls)."""
+        root, modifiers = gesture
         x, y = w.cursor_pos()
         here = w.root_window_at(x, y)
         # Injected wheel events go to the window under the cursor and carry the keys held now:
         # stop rather than zoom once Ctrl is down, or scroll another window the glide may not carry into.
         if w.held_modifiers() != modifiers or (here != root and not self._carry_to(here, x, y)):
-            self._scroller.stop()
-            return
-        self._gesture = (here, modifiers)
-        step = self._scroller.frame(time.perf_counter())
+            scroller.stop()
+            return gesture
+        step = scroller.frame(time.perf_counter())
         if step:
-            w.send_wheel(step)
-        self._frames += 1
-        scroller = self._scroller
-        if (scroller.settings.bounce and scroller.active and self._frames % _EDGE_EVERY == 0
-                and (scroller.gliding or abs(scroller.remaining) >= _EDGE_MIN)):
-            self._check_edge()
+            send(step)
+        return here, modifiers
 
     def _carry_to(self, root, x: int, y: int) -> bool:
         """With "carry the glide to other apps" on, may the glide go on in the window the cursor just
@@ -423,8 +448,8 @@ class MouseHook(QObject):
             WheelEvent(delta, self._engine.claims_wheel(), modifiers, settings.smooth is not None, settings.bypass),
             fullscreen=lambda: settings.skip_fullscreen and self._cached_fullscreen(),
             elevated=elevated, excluded=excluded)
-        if decision.stop and self._smoothing:
-            self._send(("stop",))
+        if decision.stop and self._smoothing and decision.route != HORIZONTAL:
+            self._send(("stop",))  # (a sideways step stops the vertical motion itself, keeping its own)
         if decision.mask:
             now = time.monotonic()
             if now - self._mask_time > _MASK_INTERVAL:
@@ -432,6 +457,8 @@ class MouseHook(QObject):
                 self._send(("mask",))
         if decision.route == HORIZONTAL:
             swallow, action = self._engine.wheel(delta)
+            if action and settings.smooth_sideways and not excluded():
+                action = ("hsmooth", action[1], time.perf_counter(), w.root_window_at(x, y), modifiers)
             if action:
                 self._send(action)
             return swallow

@@ -2,13 +2,13 @@
 
 ![Banner](.asset/banner.png)
 
-A small Windows tray app that gets more out of your mouse: scroll sideways with Back/Forward + wheel, move the cursor between monitors of different sizes without getting stuck, and scroll as smoothly as a touchpad.
+A small Windows tray app that gets more out of your mouse: scroll sideways with Back/Forward + wheel, move the cursor between monitors of different sizes without getting stuck, and keep scrolling after a fast flick, like a free-spinning wheel.
 Formerly called **Horizontal Scroll**: on first launch your settings and "Start with Windows" move over automatically.
 The settings window follows the Fluent Design System: Mica background, light/dark mode and your accent color.
 
 ## Features
 
-Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll start off; turn them on in their tabs.
+Each feature has its own tab and on/off switch. Monitor Cursor and Scroll Inertia start off; turn them on in their tabs.
 
 ### Horizontal Scroll
 
@@ -24,12 +24,13 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 - 🧭 **Any layout** – Side by side or stacked, mixed sizes and scaling, and monitors added or rearranged while it runs. It also works while dragging windows or files.
 - 🗺️ **See it in action** – The Cursor tab draws your monitors to scale and shades the edges that connect. A dot follows your cursor, so you can watch where it lands.
 
-### Smooth Scroll
+### Scroll Inertia
 
-- 🧈 **Smooth steps** – Each wheel notch scrolls in small steps instead of one jump. Pick the animation time and scroll distance.
-- 🛝 **Inertia** – A fast flick keeps scrolling and slows down gradually. Set how strongly it glides (0.5×–3.0×) and how slowly it stops. A click, Back/Forward or the bypass key stop it at once. Turning the wheel back stops it too, and by default that notch only stops the glide instead of scrolling back (a setting). Optionally, a glide carries on in the next app when the cursor moves there.
-- ⌨️ **Bypass key** – Hold Alt (or the key you pick) for normal notched scrolling and your apps' own Alt + wheel shortcuts. Ctrl + wheel (zoom) always passes through untouched.
-- 🖼️ **Apps that scroll normally** – Smooth Scroll stays out of the apps on a list: apps that react to every wheel step, like image viewers that would otherwise flip through dozens of images per notch. XnView, IrfanView, FastStone, ImageGlass and other common viewers are on it already; add more from the Smooth tab.
+- 🛝 **Inertia** – A fast flick keeps scrolling and slows down gradually, while a single notch scrolls one notch at once, as usual. The glide sends whole notches, as a real wheel does, so apps handle it like normal scrolling. Set how many quick notches make a flick (2–6), how strongly it glides (0.5×–3.0×) and how slowly it stops. A click, Back/Forward or the bypass key stop it at once. Turning the wheel back stops it too, and by default that notch only stops the glide instead of scrolling back (a setting). Optionally, a glide carries on in the next app when the cursor moves there.
+- 🌀 **Free spin** – A glide option that coasts like a free-spinning wheel: a hard flick keeps going for seconds and hundreds of lines, and each further notch the same way spins it faster.
+- ↔️ **Sideways too** – With Back/Forward + wheel, a flick glides on sideways as well (a setting, on by default).
+- ⌨️ **Bypass key** – Hold Alt (or the key you pick) to scroll without inertia and to use your apps' own Alt + wheel shortcuts. Ctrl + wheel (zoom) always passes through untouched.
+- 🖼️ **Apps that scroll normally** – Scroll Inertia stays out of the apps on a list: apps where a glide gets in the way, like image viewers that would keep flipping images after a quick flick. XnView, IrfanView, FastStone, ImageGlass and other common viewers are on it already; add more from the Inertia tab.
 - 🧪 **Overscroll bounce** – Experimental and off by default: the window springs back a little at the end of a page (see the limitations).
 
 ### Everywhere
@@ -46,7 +47,7 @@ Each feature has its own tab and on/off switch. Monitor Cursor and Smooth Scroll
 - **Admin windows:** the features don't act over windows of apps running as administrator unless Mouse Plus also runs as administrator. Windows blocks this; the wheel simply scrolls normally there.
 - **Horizontal Scroll:** apps without horizontal-scroll support won't scroll sideways. If mouse software (for example Logitech Options+) remaps Back/Forward to keystrokes, the app never sees the buttons. In hold mode, Back/Forward fires on button release, a moment later than usual.
 - **Monitor Cursor:** while it's on, Mouse Plus decides every crossing itself, so Windows 11's "Ease cursor movement between displays" no longer applies at shared edges.
-- **Smooth Scroll:** the few apps that ignore wheel steps smaller than a notch (some older apps and games) won't scroll smoothly. Apps that act on every wheel step, however small, jump much too far: add them to the apps that scroll normally (common image viewers are there already). Windows sends the wheel to the window under the cursor, so by default inertia stops when the cursor moves to another window. With "Carry the glide to other apps" on, it scrolls the new window instead, but still stops at apps on the list, the taskbar, full-screen apps and admin windows.
+- **Scroll Inertia:** Windows sends the wheel to the window under the cursor, so by default inertia stops when the cursor moves to another window. With "Carry the glide to other apps" on, it scrolls the new window instead, but still stops at apps on the list, the taskbar, full-screen apps and admin windows.
 - **Overscroll bounce:** Windows can't tell other programs when an app hits the end of a page, so the bounce only works in apps with classic Windows scrollbars (like Notepad++), and never moves maximized windows. A snapped window may lose its snap layout after a bounce.
 - Single-file PyInstaller exes are sometimes flagged by antivirus heuristics. If that happens, build a one-folder version instead by moving `a.binaries`/`a.datas` into a `COLLECT` step in the spec.
 
@@ -86,11 +87,11 @@ The script creates `.venv`, installs the requirements plus PyInstaller, and writ
 
 ```text
 main.py                  entry point: single instance, migration, wires config, hook and UI
-mouseplus/hook.py        the one low-level mouse hook (all features) + output thread (SendInput, animation)
+mouseplus/hook.py        the one low-level mouse hook (all features) + output thread (SendInput, glides)
 mouseplus/router.py      which feature handles a wheel event (pure, unit-tested)
 mouseplus/horizontal.py  Horizontal Scroll: trigger, click replay and toggle decisions (pure, unit-tested)
 mouseplus/cursor.py      Monitor Cursor: proportional mapping between monitors (pure, unit-tested)
-mouseplus/smooth.py      Smooth Scroll: easing and inertia (pure, unit-tested)
+mouseplus/smooth.py      Scroll Inertia: flicks and glides (pure, unit-tested)
 mouseplus/bounce.py      experimental overscroll bounce: edge test and spring (pure, unit-tested)
 mouseplus/winapi.py      ctypes bindings: input injection, monitors, windows, timers, full-screen check
 mouseplus/config.py      settings (qfluentwidgets QConfig) and the Run-key autostart
@@ -98,7 +99,7 @@ mouseplus/migrate.py     one-time move of settings and autostart from Horizontal
 mouseplus/accent.py      Windows accent shades + watcher for accent changes
 mouseplus/window.py      Fluent settings window, one tab per feature
 mouseplus/monitormap.py  monitor layout drawing on the Cursor tab, with a live cursor dot
-mouseplus/applist.py     the Smooth tab's list of apps that scroll normally, and the picker that adds one
+mouseplus/applist.py     the Inertia tab's list of apps that scroll normally, and the picker that adds one
 mouseplus/tray.py        tray icon and menu
 mouseplus/osd.py         toggle-mode on/off pill
 mouseplus/icons.py       icons drawn in code + .ico writer for the build

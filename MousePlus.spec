@@ -24,7 +24,7 @@ VERSION_INFO = VSVersionInfo(
             StringStruct("OriginalFilename", "MousePlus.exe"),
             StringStruct("CompanyName", AUTHOR),  # shown as "Publisher" in Task Manager's Startup apps
             StringStruct("LegalCopyright", f"Copyright (C) 2026 {AUTHOR}. Licensed under GPL-3.0."),
-            StringStruct("Comments", "Horizontal scrolling, proportional cursor movement between monitors and smooth scrolling."),
+            StringStruct("Comments", "Horizontal scrolling, proportional cursor movement between monitors and scroll inertia."),
         ])]),
         VarFileInfo([VarStruct("Translation", [1033, 1200])]),  # US English, Unicode
     ],

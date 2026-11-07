@@ -103,8 +103,9 @@ class CarryTest(unittest.TestCase):
             with self.subTest(carry=carry):
                 self.glide(carry=carry, move=False)  # the notch arrives before a frame noticed the move
                 self.hook._perform(("smooth", -120, self.now, B, NONE))
-                remaining = abs(self.hook._scroller.remaining)
-                self.assertEqual(remaining > 120, carry)  # without carry, only the new notch is left
+                # With carry the notch spins the glide faster; without, the glide stops and the notch starts anew.
+                self.assertEqual(self.hook._scroller.gliding, carry)
+                self.assertEqual(self.hook._scroller.remaining, 0 if carry else -120)
 
 
 class MoveTest(unittest.TestCase):
@@ -184,6 +185,83 @@ class BounceTest(unittest.TestCase):
         self.hook._bounce_frame()
         self.assertIsNone(self.hook._bounce)
         self.assertEqual(len(self.asked), 1)  # and it isn't moved back
+
+
+class SidewaysTest(unittest.TestCase):
+    """Back/Forward + wheel with smooth sideways scrolling on."""
+
+    def setUp(self):
+        self.program = "code.exe"
+        self.sideways, self.vertical, self.sent = [], [], []
+        fake(self, window_at=lambda x, y: 5, GetAncestor=lambda hwnd, flag: 6, root_window_at=lambda x, y: 6,
+             window_class=lambda hwnd: "Chrome_WidgetWin_1", program_name=lambda hwnd: self.program,
+             window_is_elevated=lambda hwnd: False, held_modifiers=lambda: NONE, cursor_pos=lambda: (10, 10),
+             send_hwheel=self.sideways.append, send_wheel=self.vertical.append)
+        self.now = 0.0
+        clock = mock.patch("mouseplus.hook.time", **{"perf_counter.side_effect": lambda: self.now})
+        clock.start()
+        self.addCleanup(clock.stop)
+        hook = self.hook = MouseHook()
+        hook._settings = HookSettings(smooth=SmoothSettings(), smooth_sideways=True,
+                                      excluded=frozenset({"xnviewmp.exe"}), skip_fullscreen=False)
+        hook._send = self.sent.append
+        hook._perform(("settings", SmoothSettings()))
+
+    def scroll_sideways(self):
+        self.hook._engine.held = 1  # Back is held
+        return self.hook._wheel(-120, 10, 10)
+
+    def play(self):
+        while self.hook._scroller.active or self.hook._hscroller.active:
+            self.now += FRAME
+            self.hook._frame()
+
+    def test_back_forward_and_wheel_scrolls_smoothly(self):
+        self.hook._smoothing = True  # a vertical glide is running
+        self.assertTrue(self.scroll_sideways())
+        self.assertEqual(self.sent[-1][:2], ("hsmooth", 120))  # wheel down scrolls right
+        self.assertNotIn(("stop",), self.sent)  # the output thread stops the vertical motion itself
+
+    def test_plain_steps_in_apps_on_the_list_or_when_switched_off(self):
+        self.program = "xnviewmp.exe"
+        self.scroll_sideways()
+        self.assertEqual(self.sent[-1], ("hwheel", 120))
+        self.program, self.hook._programs = "code.exe", {}
+        self.hook._settings = HookSettings(smooth=SmoothSettings(), smooth_sideways=False, skip_fullscreen=False)
+        self.scroll_sideways()
+        self.assertEqual(self.sent[-1], ("hwheel", 120))
+
+    def test_a_sideways_notch_goes_out_whole(self):
+        self.hook._perform(("hsmooth", 120, self.now, 6, NONE))
+        self.play()
+        self.assertEqual(self.sideways, [120])
+        self.assertEqual(self.vertical, [])
+
+    def test_a_sideways_flick_glides_on_in_whole_notches(self):
+        for _ in range(8):
+            self.hook._perform(("hsmooth", 120, self.now, 6, NONE))
+            for _ in range(2):
+                self.now += FRAME
+                self.hook._frame()
+        self.play()
+        self.assertTrue(all(step == 120 for step in self.sideways))
+        self.assertGreater(len(self.sideways), 8 + 3)  # the notches, then the glide's
+        self.assertEqual(self.vertical, [])
+
+    def test_each_direction_stops_the_other(self):
+        self.hook._perform(("hsmooth", 120, self.now, 6, NONE))
+        self.hook._perform(("smooth", -120, self.now, 6, NONE))
+        self.assertFalse(self.hook._hscroller.active)
+        self.assertTrue(self.hook._scroller.active)
+        self.hook._perform(("hwheel", 120))  # a plain sideways step: both give way
+        self.assertFalse(self.hook._scroller.active)
+        self.assertEqual(self.sideways, [120])
+
+    def test_sideways_skips_the_bounce(self):
+        self.hook._perform(("settings", SmoothSettings(bounce=True, free_spin=True)))
+        self.assertTrue(self.hook._scroller.settings.bounce)
+        sideways = self.hook._hscroller.settings
+        self.assertEqual((sideways.bounce, sideways.free_spin), (False, True))
 
 
 class TaskbarTest(unittest.TestCase):

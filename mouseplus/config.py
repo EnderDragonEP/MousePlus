@@ -11,7 +11,7 @@ from qfluentwidgets import (BoolValidator, ConfigItem, ConfigValidator, OptionsC
 from . import APP_ID, CONFIG_FILE
 from .hook import HookSettings
 from .horizontal import BACK, FORWARD, Settings
-from .smooth import DURATIONS, GLIDES, SmoothSettings
+from .smooth import GLIDES, SmoothSettings
 
 TRIGGERS = {
     "either": frozenset({BACK, FORWARD}),
@@ -19,12 +19,11 @@ TRIGGERS = {
     "forward": frozenset({FORWARD}),
 }
 TRIGGER_TEXTS = {"either": "Back or Forward", "back": "Back", "forward": "Forward"}
-DURATION_TEXTS = {"fast": "Fast", "normal": "Normal", "slow": "Slow"}
-GLIDE_TEXTS = {"short": "Short", "medium": "Medium", "long": "Long"}
+GLIDE_TEXTS = {"short": "Short", "medium": "Medium", "long": "Long", "free": "Free spin"}
 BYPASS_TEXTS = {"alt": "Alt", "ctrl": "Ctrl", "shift": "Shift", "win": "Win", "ctrl+alt": "Ctrl + Alt",
                 "ctrl+shift": "Ctrl + Shift", "alt+shift": "Alt + Shift", "none": "None"}
-# Smooth Scroll stays out of these programs at first. Many image viewers flip one image per wheel
-# message, however small, so a smoothed notch (a few dozen small messages) would flip through dozens.
+# Scroll Inertia stays out of these programs at first. Image viewers flip one image per notch, so
+# the glide after a quick flick would keep flipping images.
 IMAGE_VIEWERS = {
     "xnviewmp.exe": "XnView MP",
     "xnview.exe": "XnView Classic",
@@ -93,13 +92,11 @@ class Config(QConfig):
     # Monitor Cursor
     cursorEnabled = ConfigItem("MonitorCursor", "Enabled", False, BoolValidator())
 
-    # Smooth Scroll
-    smoothEnabled = ConfigItem("SmoothScroll", "Enabled", False, BoolValidator())
-    smoothAnimation = ConfigItem("SmoothScroll", "Animation", True, BoolValidator())
-    smoothDuration = OptionsConfigItem("SmoothScroll", "AnimationTime", "normal", OptionsValidator(list(DURATIONS)))
-    smoothDistance = RangeConfigItem("SmoothScroll", "Distance", 10, RangeValidator(5, 30))  # tenths
-    smoothInertia = ConfigItem("SmoothScroll", "Inertia", True, BoolValidator())
-    smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDES)))
+    # Scroll Inertia (stored under "SmoothScroll", its first name)
+    smoothEnabled = ConfigItem("SmoothScroll", "Enabled", False, BoolValidator())  # the Inertia switch
+    smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDE_TEXTS)))
+    smoothFlick = RangeConfigItem("SmoothScroll", "FlickNotches", 3, RangeValidator(2, 6))  # quick notches
+    smoothSideways = ConfigItem("SmoothScroll", "Sideways", True, BoolValidator())  # Back/Forward + wheel too
     smoothMomentum = RangeConfigItem("SmoothScroll", "InertiaMultiplier", 10, RangeValidator(5, 30))  # tenths
     smoothBrake = ConfigItem("SmoothScroll", "ReverseStopsGlide", True, BoolValidator())
     smoothCarry = ConfigItem("SmoothScroll", "CarryToOtherApps", False, BoolValidator())
@@ -117,9 +114,8 @@ class Config(QConfig):
     def hookItems(cls) -> list:
         """Every setting the mouse hook depends on."""
         return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
-                cls.disableInFullscreen, cls.smoothAnimation, cls.smoothDuration, cls.smoothDistance,
-                cls.smoothInertia, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.smoothCarry,
-                cls.bypassKey, cls.smoothExcluded, cls.smoothBounce]
+                cls.disableInFullscreen, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.smoothCarry,
+                cls.smoothFlick, cls.smoothSideways, cls.bypassKey, cls.smoothExcluded, cls.smoothBounce]
 
 
 cfg = Config()
@@ -135,6 +131,7 @@ def any_feature_on() -> bool:
 
 def hook_settings() -> HookSettings:
     horizontal = cfg.horizontalEnabled.value
+    smooth = smooth_settings()
     return HookSettings(
         horizontal=Settings(
             buttons=TRIGGERS[cfg.trigger.value] if horizontal else frozenset(),  # no trigger: feature off
@@ -144,7 +141,8 @@ def hook_settings() -> HookSettings:
             speed=cfg.horizontalSpeed.value / 10,
         ),
         cursor=cfg.cursorEnabled.value,
-        smooth=smooth_settings(),
+        smooth=smooth,
+        smooth_sideways=smooth is not None and cfg.smoothSideways.value,
         bypass=frozenset() if cfg.bypassKey.value == "none" else frozenset(cfg.bypassKey.value.split("+")),
         excluded=frozenset(cfg.smoothExcluded.value),
         skip_fullscreen=cfg.disableInFullscreen.value,
@@ -152,20 +150,17 @@ def hook_settings() -> HookSettings:
 
 
 def smooth_settings():
-    """None when Smooth Scroll is off or would do nothing (no animation, 1.0x distance, no bounce)."""
-    animate, distance, bounce = cfg.smoothAnimation.value, cfg.smoothDistance.value / 10, cfg.smoothBounce.value
-    if not cfg.smoothEnabled.value or (not animate and distance == 1.0 and not bounce):
+    """None when Scroll Inertia is off."""
+    if not cfg.smoothEnabled.value:
         return None
     return SmoothSettings(
-        animate=animate,
-        duration=DURATIONS[cfg.smoothDuration.value],
-        distance=distance,
-        inertia=animate and cfg.smoothInertia.value,  # inertia continues the animation
-        glide=GLIDES[cfg.smoothGlide.value],
+        glide=GLIDES.get(cfg.smoothGlide.value, GLIDES["long"]),
+        free_spin=cfg.smoothGlide.value == "free",
         momentum=cfg.smoothMomentum.value / 10,
+        flick=cfg.smoothFlick.value,
         brake=cfg.smoothBrake.value,
         carry=cfg.smoothCarry.value,
-        bounce=bounce,
+        bounce=cfg.smoothBounce.value,
     )
 
 
