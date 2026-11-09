@@ -2,7 +2,7 @@ import unittest
 
 from mouseplus.config import (IMAGE_VIEWERS, ProgramListValidator, ProgramNamesValidator, cfg, hook_settings,
                               program_label, program_names, smooth_settings)
-from mouseplus.smooth import GLIDES
+from mouseplus.smooth import CONTRASTS, GLIDES
 
 
 class SmoothSettingsTest(unittest.TestCase):
@@ -18,6 +18,13 @@ class SmoothSettingsTest(unittest.TestCase):
         self.assertEqual((s.free_spin, s.flick), (True, 2))
         self.set(smoothGlide="long")
         self.assertEqual((smooth_settings().free_spin, smooth_settings().glide), (False, GLIDES["long"]))
+
+    def test_flick_contrast_steps(self):
+        self.set(smoothEnabled=True, smoothContrast=0)
+        self.assertEqual(smooth_settings().contrast, 0.0)
+        self.set(smoothContrast=3)
+        self.assertEqual(smooth_settings().contrast, CONTRASTS[3])
+        self.assertEqual(cfg.smoothContrast.defaultValue, 1)  # Low
 
     def test_off_means_the_wheel_isnt_touched(self):
         self.set(smoothEnabled=False)

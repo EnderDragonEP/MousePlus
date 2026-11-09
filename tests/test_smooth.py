@@ -1,6 +1,6 @@
 import unittest
 
-from mouseplus.smooth import FRAME, GLIDES, SmoothScroller, SmoothSettings
+from mouseplus.smooth import CONTRASTS, FRAME, GLIDES, SmoothScroller, SmoothSettings
 
 
 def run(settings, notches, gap, until=30.0):
@@ -160,6 +160,25 @@ class InertiaTest(unittest.TestCase):
         self.assertEqual(s.frame(FRAME), -120)
         s.add(120, 0.02)
         self.assertEqual(s.frame(0.02 + FRAME), 120)
+
+
+class ContrastTest(unittest.TestCase):
+    """Flick contrast: hard flicks glide disproportionately farther; gentle and normal ones don't change."""
+
+    def test_off_leaves_every_flick_as_it_was(self):
+        for gap in (0.05, 0.02, 0.01):
+            self.assertEqual(notches_scrolled(SmoothSettings(contrast=0.0), 6, gap),
+                             notches_scrolled(SmoothSettings(), 6, gap))
+
+    def test_flicks_up_to_40_notches_a_second_dont_change(self):
+        for gap in (0.05, 0.03, 1 / 40):
+            self.assertEqual(notches_scrolled(SmoothSettings(contrast=1.5), 6, gap),
+                             notches_scrolled(SmoothSettings(), 6, gap))
+
+    def test_more_contrast_makes_a_hard_flick_go_farther(self):
+        hard = [notches_scrolled(SmoothSettings(glide=GLIDES["long"], contrast=c), 6, 0.01) for c in CONTRASTS]
+        self.assertEqual(hard, sorted(hard))
+        self.assertGreater(hard[-1], 3 * hard[0])
 
 
 class FreeSpinTest(unittest.TestCase):

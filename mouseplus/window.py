@@ -9,7 +9,7 @@ from qfluentwidgets import (BodyLabel, ComboBoxSettingCard, ExpandLayout, Fluent
 
 from . import APP_NAME, REPO_URL, __version__, config, icons
 from .applist import AppListCard
-from .config import BYPASS_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
+from .config import BYPASS_TEXTS, CONTRAST_TEXTS, GLIDE_TEXTS, TRIGGER_TEXTS, cfg
 from .monitormap import MonitorMap
 from .updates import UpdateChecker, is_newer
 
@@ -62,6 +62,13 @@ class NotchesCard(SliderCard):
 
     def valueText(self, value) -> str:
         return f"{value} notches"
+
+
+class ContrastCard(SliderCard):
+    """A flick contrast step, by name ("Medium")."""
+
+    def valueText(self, value) -> str:
+        return CONTRAST_TEXTS[value]
 
 
 class AboutCard(PrimaryPushSettingCard):
@@ -209,6 +216,8 @@ class SmoothPage(Page):
             cfg.smoothEnabled, self.inertia)
         self.flickCard = NotchesCard(cfg.smoothFlick, FIF.FINGERPRINT, "Flick threshold",
                                      "How many quick notches start a glide", self.inertia)
+        self.contrastCard = ContrastCard(cfg.smoothContrast, FIF.SPEED_HIGH, "Flick contrast",
+                                         "How much farther a hard flick glides than a gentle one", self.inertia)
         self.momentumCard = MultiplierCard(cfg.smoothMomentum, FIF.ZOOM_IN, "Inertia multiplier",
                                            "How fast a flick keeps going, and so how far", self.inertia)
         self.glideCard = ComboBoxSettingCard(
@@ -222,8 +231,8 @@ class SmoothPage(Page):
             FIF.SHARE, "Carry the glide to other apps",
             "A glide keeps going when the cursor moves to another window",
             cfg.smoothCarry, self.inertia)
-        self.inertia.addSettingCards([self.enableCard, self.flickCard, self.momentumCard, self.glideCard,
-                                      self.brakeCard, self.carryCard])
+        self.inertia.addSettingCards([self.enableCard, self.flickCard, self.contrastCard, self.momentumCard,
+                                      self.glideCard, self.brakeCard, self.carryCard])
 
         self.bypass = Group("Bypass", self.view)
         self.bypassCard = ComboBoxSettingCard(

@@ -11,7 +11,7 @@ from qfluentwidgets import (BoolValidator, ConfigItem, ConfigValidator, OptionsC
 from . import APP_ID, CONFIG_FILE
 from .hook import HookSettings
 from .horizontal import BACK, FORWARD, Settings
-from .smooth import GLIDES, SmoothSettings
+from .smooth import CONTRASTS, GLIDES, SmoothSettings
 
 TRIGGERS = {
     "either": frozenset({BACK, FORWARD}),
@@ -19,6 +19,7 @@ TRIGGERS = {
     "forward": frozenset({FORWARD}),
 }
 TRIGGER_TEXTS = {"either": "Back or Forward", "back": "Back", "forward": "Forward"}
+CONTRAST_TEXTS = ("Off", "Low", "Medium", "High")  # the steps of CONTRASTS
 GLIDE_TEXTS = {"short": "Short", "medium": "Medium", "long": "Long", "free": "Free spin"}
 BYPASS_TEXTS = {"alt": "Alt", "ctrl": "Ctrl", "shift": "Shift", "win": "Win", "ctrl+alt": "Ctrl + Alt",
                 "ctrl+shift": "Ctrl + Shift", "alt+shift": "Alt + Shift", "none": "None"}
@@ -96,6 +97,7 @@ class Config(QConfig):
     smoothEnabled = ConfigItem("SmoothScroll", "Enabled", False, BoolValidator())  # the Inertia switch
     smoothGlide = OptionsConfigItem("SmoothScroll", "Glide", "medium", OptionsValidator(list(GLIDE_TEXTS)))
     smoothFlick = RangeConfigItem("SmoothScroll", "FlickNotches", 3, RangeValidator(2, 6))  # quick notches
+    smoothContrast = RangeConfigItem("SmoothScroll", "FlickContrast", 1, RangeValidator(0, len(CONTRASTS) - 1))
     smoothMomentum = RangeConfigItem("SmoothScroll", "InertiaMultiplier", 10, RangeValidator(5, 30))  # tenths
     smoothBrake = ConfigItem("SmoothScroll", "ReverseStopsGlide", True, BoolValidator())
     smoothCarry = ConfigItem("SmoothScroll", "CarryToOtherApps", False, BoolValidator())
@@ -114,7 +116,7 @@ class Config(QConfig):
         """Every setting the mouse hook depends on."""
         return [*cls.featureItems(), cls.trigger, cls.toggleMode, cls.horizontalReverse, cls.horizontalSpeed,
                 cls.disableInFullscreen, cls.smoothMomentum, cls.smoothGlide, cls.smoothBrake, cls.smoothCarry,
-                cls.smoothFlick, cls.bypassKey, cls.smoothExcluded, cls.smoothBounce]
+                cls.smoothFlick, cls.smoothContrast, cls.bypassKey, cls.smoothExcluded, cls.smoothBounce]
 
 
 cfg = Config()
@@ -155,6 +157,7 @@ def smooth_settings():
         free_spin=cfg.smoothGlide.value == "free",
         momentum=cfg.smoothMomentum.value / 10,
         flick=cfg.smoothFlick.value,
+        contrast=CONTRASTS[cfg.smoothContrast.value],
         brake=cfg.smoothBrake.value,
         carry=cfg.smoothCarry.value,
         bounce=cfg.smoothBounce.value,

@@ -30,6 +30,8 @@ _RAMP = 0.06            # seconds to ease the inertia multiplier in at the start
 _NOTCH_GAP = 0.125      # a glide ends once its notches would come further apart than this
 _PACE_SHARE = 0.55      # a glide starts at this share of the flick's pace...
 _LEAST_SPEED = 2.0 * NOTCH / _NOTCH_GAP  # ...but at least this fast, so even a gentle flick glides a little
+_CONTRAST_FROM = 40 * NOTCH  # flicks faster than this (units per second) get the flick contrast boost
+CONTRASTS = (0.0, 0.5, 1.0, 1.5)  # flick contrast Off, Low, Medium, High: the boost's power
 # Free spin slows down like a heavy wheel: dv/dt = -(_SPIN_FRICTION + _SPIN_DRAG * v).
 _SPIN_FRICTION = 300.0  # units per second, every second
 _SPIN_DRAG = 0.35       # per second
@@ -45,6 +47,7 @@ class SmoothSettings:
     free_spin: bool = False   # glide like a free-spinning wheel instead (`glide` is then unused)
     momentum: float = 1.0     # inertia multiplier: how fast (and so how far) a flick glides
     flick: int = 3            # quick notches (within _FLICK_WINDOW) that make a flick
+    contrast: float = 0.0     # how much farther than in proportion a fast flick goes (one of CONTRASTS)
     brake: bool = True        # turning the wheel back during a glide only stops it
     carry: bool = False       # a glide goes on in the next window the cursor moves to (played by the hook)
     bounce: bool = False      # experimental overscroll bounce (played by the hook, not here)
@@ -117,12 +120,15 @@ class SmoothScroller:
 
     def _glide(self, sign: int, now: float):
         """The flick is over: glide on at a speed set by its pace, easing the multiplier in."""
-        pace = self._pace()
+        raw = pace = self._pace()
         if self.settings.free_spin:  # a harder flick spins the wheel disproportionately faster
             low, high = _SPIN_BOOST
             pace *= min(max(math.sqrt(pace / _SPIN_REF), low), high)
         else:
             pace *= _PACE_SHARE
+        # Flick contrast: flicks faster than _CONTRAST_FROM get disproportionately faster still;
+        # slower ones are untouched.
+        pace *= max(raw / _CONTRAST_FROM, 1.0) ** self.settings.contrast
         speed = sign * max(pace, _LEAST_SPEED)
         self.glide_base, self.glide_target = speed, speed * self.settings.momentum
         self.glide_start = self.boost_start = now
