@@ -69,6 +69,7 @@ class SmoothScroller:
         self.boost_start = 0.0   # when its speed started easing from glide_base to glide_target
         self.glide_base = 0.0    # the speed the glide started at: set by the flick's pace
         self.glide_target = 0.0  # the speed it eases to: with the inertia multiplier
+        self.reflick = None      # a new flick during the glide: (its pace, the glide it lifted the speed above)
 
     @property
     def active(self) -> bool:
@@ -110,6 +111,8 @@ class SmoothScroller:
         dt = min(max(now - self.last, 0.0), _MAX_DT)
         self.last = now
         if self.velocity:
+            if self.reflick and now - self.notches[-1][0] >= _FLICK_END:  # the new flick is over
+                self._relaunch(now)
             return self._emit_notches(self._glide_step(dt, now))
         step, self.remaining = self.remaining, 0.0
         if self.watching and now - self.notches[-1][0] >= _FLICK_END:  # the notches have stopped coming
@@ -120,7 +123,15 @@ class SmoothScroller:
 
     def _glide(self, sign: int, now: float):
         """The flick is over: glide on at a speed set by its pace, easing the multiplier in."""
-        raw = pace = self._pace()
+        speed = sign * self._launch_speed(self._pace())
+        self.glide_base, self.glide_target = speed, speed * self.settings.momentum
+        self.glide_start = self.boost_start = now
+        self.velocity = speed
+        self.notches.clear()  # measured: from now on it holds the notches of a flick during the glide
+
+    def _launch_speed(self, pace: float) -> float:
+        """The speed a flick at this pace starts its glide at (before the multiplier)."""
+        raw = pace
         if self.settings.free_spin:  # a harder flick spins the wheel disproportionately faster
             low, high = _SPIN_BOOST
             pace *= min(max(math.sqrt(pace / _SPIN_REF), low), high)
@@ -129,10 +140,7 @@ class SmoothScroller:
         # Flick contrast: flicks faster than _CONTRAST_FROM get disproportionately faster still;
         # slower ones are untouched.
         pace *= max(raw / _CONTRAST_FROM, 1.0) ** self.settings.contrast
-        speed = sign * max(pace, _LEAST_SPEED)
-        self.glide_base, self.glide_target = speed, speed * self.settings.momentum
-        self.glide_start = self.boost_start = now
-        self.velocity = speed
+        return max(pace, _LEAST_SPEED)
 
     def _pace(self) -> float:
         """How fast the flick's notches came, in units per second."""
@@ -143,11 +151,43 @@ class SmoothScroller:
 
     def _push(self, distance: float, now: float):
         """A notch the same way during a glide: its distance, spread over _SPIN_PUSH, joins the
-        current speed (times the multiplier), and the glide slows down from there."""
+        glide's speed (times the multiplier), and the glide slows down from there.
+
+        Notches that come as fast as a flick are a new flick, which should feel like the first one
+        did. While it lasts, the glide goes at least at its pace, as the first flick's notches did;
+        when it's over, the glide goes on like after the first flick: at the speed that flick
+        starts a glide at, unless the glide was going faster anyway (see _relaunch)."""
+        glide = self.reflick[1] if self.reflick else self._glide_state()
+        self._set_glide(glide, now)
         speed = self._glide_speed(now) + distance / _SPIN_PUSH * self.settings.momentum
-        self.glide_base = self.glide_target = speed
-        self.glide_start = self.boost_start = now
-        self.velocity = speed
+        self._set_glide((speed, speed, now, now), now)
+        self.reflick = None
+        if self.notches:  # with this notch, enough of them to tell how fast they come
+            self.notches.append((now, abs(distance)))
+            pace = self._pace()
+            self.notches.pop()
+            self.reflick = (pace, self._glide_state())
+            if pace > abs(speed):
+                lifted = math.copysign(pace, speed)
+                self._set_glide((lifted, lifted, now, now), now)
+
+    def _relaunch(self, now: float):
+        """A new flick during the glide is over: glide on as after a first flick at its pace."""
+        pace, glide = self.reflick
+        self.reflick = None
+        self.notches.clear()
+        self._set_glide(glide, now)
+        sign = 1 if self.velocity > 0 else -1
+        launch = sign * self._launch_speed(pace)
+        if abs(launch * self.settings.momentum) > abs(self._glide_speed(now)):
+            self._set_glide((launch, launch * self.settings.momentum, now, now), now)
+
+    def _glide_state(self) -> tuple:
+        return self.glide_base, self.glide_target, self.glide_start, self.boost_start
+
+    def _set_glide(self, state: tuple, now: float):
+        self.glide_base, self.glide_target, self.glide_start, self.boost_start = state
+        self.velocity = self._glide_speed(now) or self.velocity
 
     def _glide_speed(self, now: float) -> float:
         """The glide's speed at `now`: the multiplier eased in over _RAMP, slowing down."""

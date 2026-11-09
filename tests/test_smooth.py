@@ -162,6 +162,50 @@ class InertiaTest(unittest.TestCase):
         self.assertEqual(s.frame(0.02 + FRAME), 120)
 
 
+class RepeatedFlickTest(unittest.TestCase):
+    """Flicking again and again at the same speed feels the same every time."""
+
+    def flicks(self, settings, count=4):
+        """Flicks of 6 notches at 50 a second, 0.35 s apart (so each lands during the glide):
+        units sent while each flick's notches come, and the glide's speed once each is over."""
+        s, t, sent, speeds = SmoothScroller(settings), 0.0, [], []
+        for _ in range(count):
+            during, nxt = 0, t
+            for _ in range(6):
+                s.add(-120, nxt)
+                nxt += 0.02
+                while t + FRAME <= nxt:
+                    t += FRAME
+                    during += s.frame(t)
+            sent.append(abs(during))
+            for _ in range(round(0.1 / FRAME)):  # the flick is over and its glide eased in
+                t += FRAME
+                s.frame(t)
+            speeds.append(abs(s.velocity))
+            for _ in range(round(0.25 / FRAME)):
+                t += FRAME
+                s.frame(t)
+        return sent, speeds
+
+    def test_each_flick_scrolls_about_as_fast_as_the_first(self):
+        for name, settings in (("medium", SmoothSettings()), ("long", LONG), ("free spin", FREE)):
+            with self.subTest(name):
+                sent, _ = self.flicks(settings)
+                self.assertTrue(all(x >= sent[0] - 120 for x in sent[1:]), sent)
+
+    def test_each_flick_glides_at_least_as_fast_as_the_first(self):
+        for name, settings in (("medium", SmoothSettings()), ("long", LONG)):
+            with self.subTest(name):
+                _, speeds = self.flicks(settings)
+                self.assertTrue(all(x >= 0.9 * speeds[0] for x in speeds[1:]), speeds)
+
+    def test_a_slow_notch_during_a_glide_still_just_adds_a_little(self):
+        s, t = gliding()
+        before = abs(s.velocity)
+        s.add(-120, t)
+        self.assertLess(abs(s.velocity), before + 120 / 0.25 + 1)
+
+
 class ContrastTest(unittest.TestCase):
     """Flick contrast: hard flicks glide disproportionately farther; gentle and normal ones don't change."""
 
