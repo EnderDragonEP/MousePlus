@@ -4,6 +4,20 @@
 All notable changes to Mouse Plus (formerly Horizontal Scroll) are listed here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-11-10
+
+### Added
+
+- **Flick contrast** on the Inertia tab (Off, Low, Medium or High): hard flicks glide disproportionately farther than gentle ones. Flicks up to about 40 notches a second glide just as before. It starts at Low; Off is the 2.0.0 behavior.
+
+### Changed
+
+- Back/Forward + wheel always glides on after a flick while Scroll Inertia is on. The "Sideways too" switch is gone.
+
+### Fixed
+
+- Flicking again during a glide felt weaker than the first flick, even at the same speed. Each flick now scrolls as fast as the first one, and its glide starts at least as fast.
+
 ## [2.0.0] - 2026-11-08
 
 Horizontal Scroll is now **Mouse Plus**. Besides scrolling sideways, it can move your cursor between monitors of different sizes without getting stuck, and keep scrolling after a fast flick, like a free-spinning wheel. Each feature has its own tab and on/off switch; the new ones start off.
@@ -71,6 +85,7 @@ The first release, as Horizontal Scroll.
 - A Fluent Design settings window with Mica, light/dark mode and your Windows accent color, updated live.
 - An About section with "View source" and "Check for updates".
 
+[2.0.1]: https://github.com/EnderDragonEP/MousePlus/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/EnderDragonEP/MousePlus/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/EnderDragonEP/MousePlus/compare/v.1.0.1...v1.0.2
 [1.0.1]: https://github.com/EnderDragonEP/MousePlus/compare/v1.0.0...v.1.0.1
