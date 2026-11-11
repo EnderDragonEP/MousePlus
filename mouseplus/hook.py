@@ -44,7 +44,7 @@ def _program_of(hwnd) -> str:
 class HookSettings:
     horizontal: Settings = field(default_factory=Settings)
     cursor: bool = False                     # Monitor Cursor: proportional moves between monitors
-    smooth: Optional[SmoothSettings] = None  # Scroll Inertia (Back/Forward + wheel too); None when off
+    smooth: Optional[SmoothSettings] = None  # Scroll Inertia and the bounce; None when both are off
     bypass: frozenset = frozenset({"alt"})   # keys that make the wheel pass through untouched
     excluded: frozenset = frozenset()        # programs Scroll Inertia stays out of ("xnviewmp.exe")
     skip_fullscreen: bool = True             # every feature stays out of full-screen apps
@@ -456,7 +456,7 @@ class MouseHook(QObject):
                 self._send(("mask",))
         if decision.route == HORIZONTAL:
             swallow, action = self._engine.wheel(delta)
-            if action and settings.smooth is not None and not excluded():  # Scroll Inertia covers sideways too
+            if action and settings.smooth and settings.smooth.inertia and not excluded():  # sideways glides too
                 action = ("hsmooth", action[1], time.perf_counter(), w.root_window_at(x, y), modifiers)
             if action:
                 self._send(action)

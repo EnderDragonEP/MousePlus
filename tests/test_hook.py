@@ -230,6 +230,9 @@ class SidewaysTest(unittest.TestCase):
         self.hook._settings = HookSettings(smooth=None, skip_fullscreen=False)
         self.scroll_sideways()
         self.assertEqual(self.sent[-1], ("hwheel", 120))
+        self.hook._settings = HookSettings(smooth=SmoothSettings(inertia=False, bounce=True), skip_fullscreen=False)
+        self.scroll_sideways()  # just the bounce on: nothing to do sideways
+        self.assertEqual(self.sent[-1], ("hwheel", 120))
 
     def test_a_sideways_notch_goes_out_whole(self):
         self.hook._perform(("hsmooth", 120, self.now, 6, NONE))

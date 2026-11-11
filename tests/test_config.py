@@ -27,11 +27,15 @@ class SmoothSettingsTest(unittest.TestCase):
         self.assertEqual(cfg.smoothContrast.defaultValue, 1)  # Low
 
     def test_off_means_the_wheel_isnt_touched(self):
-        self.set(smoothEnabled=False)
+        self.set(smoothEnabled=False, smoothBounce=False)
         self.assertIsNone(smooth_settings())
         self.assertIsNone(hook_settings().smooth)
         self.set(smoothEnabled=True, smoothBounce=True)
-        self.assertTrue(smooth_settings().bounce)
+        self.assertEqual((smooth_settings().inertia, smooth_settings().bounce), (True, True))
+
+    def test_the_bounce_works_with_inertia_off(self):
+        self.set(smoothEnabled=False, smoothBounce=True)
+        self.assertEqual((smooth_settings().inertia, smooth_settings().bounce), (False, True))
 
 
 class ProgramListTest(unittest.TestCase):

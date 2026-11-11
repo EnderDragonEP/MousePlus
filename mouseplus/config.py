@@ -149,10 +149,11 @@ def hook_settings() -> HookSettings:
 
 
 def smooth_settings():
-    """None when Scroll Inertia is off."""
-    if not cfg.smoothEnabled.value:
+    """None when neither Scroll Inertia nor the overscroll bounce is on: the wheel isn't touched."""
+    if not cfg.smoothEnabled.value and not cfg.smoothBounce.value:
         return None
     return SmoothSettings(
+        inertia=cfg.smoothEnabled.value,
         glide=GLIDES.get(cfg.smoothGlide.value, GLIDES["long"]),
         free_spin=cfg.smoothGlide.value == "free",
         momentum=cfg.smoothMomentum.value / 10,

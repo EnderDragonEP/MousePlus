@@ -43,6 +43,7 @@ _MAX_SPIN = 10.0        # seconds a free spin may run after its last push
 
 @dataclass(frozen=True)
 class SmoothSettings:
+    inertia: bool = True      # a fast flick glides on (off: notches just pass, for the bounce alone)
     glide: float = GLIDES["medium"]
     free_spin: bool = False   # glide like a free-spinning wheel instead (`glide` is then unused)
     momentum: float = 1.0     # inertia multiplier: how fast (and so how far) a flick glides
@@ -99,7 +100,8 @@ class SmoothScroller:
             self._push(delta, now)  # spin the wheel faster
         else:
             self.remaining += delta
-            self.watching = sign
+            if self.settings.inertia:
+                self.watching = sign
         self.notches.append((now, abs(delta)))
         while now - self.notches[0][0] > _FLICK_WINDOW:
             self.notches.popleft()

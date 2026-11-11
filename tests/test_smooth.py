@@ -54,6 +54,10 @@ def gliding(settings=SmoothSettings()):
 
 
 class NotchTest(unittest.TestCase):
+    def test_inertia_off_means_just_the_notches(self):
+        steps, _, glided, _ = run(SmoothSettings(inertia=False), *HARD)
+        self.assertEqual((steps, glided), ([-120] * 8, False))
+
     def test_a_notch_goes_out_whole_and_at_once(self):
         steps, times, glided, s = run(SmoothSettings(), 1, FRAME)
         self.assertEqual(steps, [-120])
