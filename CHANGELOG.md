@@ -18,7 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Back/Forward + wheel always glides on after a flick while Scroll Inertia is on. The "Sideways too" switch is gone.
+- **Scroll Inertia works with Horizontal Scroll:** a fast flick while holding Back or Forward glides on sideways too, whenever Scroll Inertia is on. The "Sideways too" switch is gone.
 
 ### Fixed
 
