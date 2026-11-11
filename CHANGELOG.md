@@ -4,6 +4,12 @@
 All notable changes to Mouse Plus (formerly Horizontal Scroll) are listed here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] - 2026-11-11
+
+### Changed
+
+- **Overscroll bounce** works without Inertia: with Inertia off and the bounce on, each notch scrolls as usual and the window still springs back at the end of a page.
+
 ## [2.0.1] - 2026-11-10
 
 ### Added
@@ -85,6 +91,7 @@ The first release, as Horizontal Scroll.
 - A Fluent Design settings window with Mica, light/dark mode and your Windows accent color, updated live.
 - An About section with "View source" and "Check for updates".
 
+[2.0.2]: https://github.com/EnderDragonEP/MousePlus/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/EnderDragonEP/MousePlus/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/EnderDragonEP/MousePlus/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/EnderDragonEP/MousePlus/compare/v.1.0.1...v1.0.2
